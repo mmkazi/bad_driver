@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TRAFFIC_ROUTES, sampleRoute } from './traffic.js';
+import { MOUNTAINS, GARAGE_PARTS, garageColliders, treeCollider } from './scenery.js';
 import { GATES } from './physics.js';
 import { ROAD_SEGMENTS, ROAD_POINTS, ROAD_WIDTH, ROAD_THICKNESS, LAKE, BOUNDS, FINISH, BRIDGE_RAILS, inLake } from './course.js';
 
@@ -71,6 +72,7 @@ export function createWorld(canvas) {
   const yard = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), new THREE.MeshStandardMaterial({ map: texture, roughness: 1 })); yard.rotation.x = -Math.PI / 2; yard.position.y = -.035; yard.receiveShadow = true; scene.add(yard);
 
   const cameraObstacles=[];
+  const obstacles = [], cones = [], gates = [];
   // A continuous ribbon avoids coplanar overlap seams on the curved deck.
   function roadRibbon(offset,width,color,lift){
     const vertices=[],indices=[];
@@ -144,7 +146,8 @@ export function createWorld(canvas) {
     const road=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x79867e,side:THREE.DoubleSide}));road.receiveShadow=true;scene.add(road);
     for(const end of [false,true]){
       const pose=sampleRoute(route,end?route.length:0),garage=new THREE.Group();scene.add(garage);garage.position.set(pose.x,0,pose.z);garage.rotation.y=-pose.yaw+(end?Math.PI:0);
-      box(garage,1,6,12,0xd5bd91,-5,3);box(garage,1,6,12,0xd5bd91,5,3);box(garage,11,6,1,0x536e62,0,3,5.5);box(garage,12,.7,13,0x668b7a,0,6.3);
+      for(const p of GARAGE_PARTS)cameraObstacles.push(box(garage,p.width,p.height,p.depth,p.color,p.x,p.y,p.z));
+      obstacles.push(...garageColliders(pose.x,pose.z,garage.rotation.y));
       const board=label(garage,end?'DELIVERIES':'SUNNY TRANSIT',9);board.position.set(0,5.5,-6.1);board.rotation.y=Math.PI;
     }
   }
@@ -152,10 +155,7 @@ export function createWorld(canvas) {
   cylinder(cliffSign,.1,.1,3.2,0x747f66,0,1.6,0,6);
   const caution=label(cliffSign,'RIGHT TURN  →',5.5,'#fff3d0','#c97849');caution.position.y=3.4;
   const dropSign=label(cliffSign,'NO GUARDRAILS',4,'#fff3d0','#c97849');dropSign.position.y=2.5;
-  for(let i=0;i<16;i++){
-    const angle=i*Math.PI/8,radius=270;
-    cylinder(scene,0,24+(i%3)*8,25+(i%4)*12,i%2?0x96b7a0:0xa8bfa6,60+Math.cos(angle)*radius,9,25+Math.sin(angle)*radius,5);
-  }
+  MOUNTAINS.forEach((m,i)=>cylinder(scene,0,m.radius,m.height,i%2?0x96b7a0:0xa8bfa6,m.x,m.height/2-.07,m.z,5));
   for(let i=0;i<7;i++){
     const cloud=new THREE.Group();scene.add(cloud);cloud.position.set(-100+i*34,40+i%3*7,-100-i%2*35);
     for(let j=0;j<3;j++){
@@ -164,7 +164,6 @@ export function createWorld(canvas) {
     }
   }
 
-  const obstacles = [], cones = [], gates = [];
   function cone(x, z) {
     const group = new THREE.Group(); group.position.set(x, 0, z); scene.add(group);
     box(group, .95, .13, .95, 0x505847, 0, .065, 0);
@@ -194,7 +193,8 @@ export function createWorld(canvas) {
   const random = seeded();
   function tree(x, z, size = 1) {
     const group = new THREE.Group(); scene.add(group); group.position.set(x, 0, z); group.scale.setScalar(size);
-    cylinder(group, .2, .3, 2.5, 0x938566, 0, 1.2, 0, 5);
+    cylinder(group, .2, .3, 2.5, 0x938566, 0, 1.25, 0, 5);
+    obstacles.push(treeCollider(x,z,size));
     cylinder(group, 0, 2.2, 4.5, [0x849d68,0x6c8e64,0x93a773][Math.floor(random()*3)], 0, 4, 0, 6);
     cylinder(group, 0, 1.7, 3, 0x9ab37e, 0, 6, 0, 6);
   }

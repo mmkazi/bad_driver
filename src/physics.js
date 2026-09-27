@@ -43,8 +43,9 @@ export function createCar({course=true,obstacles=[],traffic=false}={}){
   if(course)for(const rail of BRIDGE_RAILS)staticBox(world,new CANNON.Vec3(rail.width/2,rail.height/2,rail.depth/2),new CANNON.Vec3(rail.x,rail.y,rail.z));
   for(const o of obstacles){
     if(o.kind==='cone')continue;
-    const height=o.kind==='building'?6:1.5;
-    staticBox(world,new CANNON.Vec3(o.radius,height/2,o.radius),new CANNON.Vec3(o.x,(o.y||0)+height/2,o.z));
+    const height=o.height??(o.kind==='building'?6:1.5);
+    const q=new CANNON.Quaternion();q.setFromEuler(0,o.yaw||0,0);
+    staticBox(world,new CANNON.Vec3(o.width?o.width/2:o.radius,height/2,o.depth?o.depth/2:o.radius),new CANNON.Vec3(o.x,(o.y||0)+height/2,o.z),q);
   }
   for(const x of [BOUNDS.minX,BOUNDS.maxX])staticBox(world,new CANNON.Vec3(.5,1,(BOUNDS.maxZ-BOUNDS.minZ)/2),new CANNON.Vec3(x,1,(BOUNDS.minZ+BOUNDS.maxZ)/2));
   for(const z of [BOUNDS.minZ,BOUNDS.maxZ])staticBox(world,new CANNON.Vec3((BOUNDS.maxX-BOUNDS.minX)/2,1,.5),new CANNON.Vec3((BOUNDS.minX+BOUNDS.maxX)/2,1,z));

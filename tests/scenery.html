@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Scenery visual checks</title>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","cannon-es":"/node_modules/cannon-es/dist/cannon-es.js"}}</script>
+<style>body{margin:0;background:#eef0df;font:16px system-ui}header{padding:12px;display:flex;gap:12px;align-items:center}button{padding:10px}#view{height:calc(100vh - 70px)}canvas{display:block;width:100%;height:100%}</style>
+<header><button id="finish">Downhill finish</button><button id="orchard">Orchard bend</button><button id="garage">Garage joints</button><label><input id="orbit" type="checkbox"> Orbit camera</label><span id="status">Loading…</span></header><div id="view"><canvas id="scene"></canvas></div>
+<script type="module">
+import {createWorld} from '../src/world.js';
+import {createCar,respawnCar} from '../src/physics.js';
+const world=createWorld(document.getElementById('scene')),car=createCar({obstacles:world.obstacles});let spawn;
+function select(next){spawn=next;respawnCar(car,spawn);world.snapCamera();}
+document.getElementById('finish').onclick=()=>select({x:150,y:5,z:280,yaw:-Math.PI/2});
+document.getElementById('orchard').onclick=()=>select({x:220,y:5,z:250,yaw:Math.PI});
+document.getElementById('garage').onclick=()=>select({x:165,y:0,z:215,yaw:Math.PI*3/4});
+document.getElementById('finish').click();document.getElementById('status').textContent='Scene loaded · '+world.obstacles.filter(o=>o.kind==='tree').length+' solid trunks';
+let last=performance.now();function frame(now){const dt=Math.min((now-last)/1000,.05);last=now;if(document.getElementById('orbit').checked){spawn.yaw+=dt*.3;respawnCar(car,spawn);}world.snapCamera();world.render(car,dt,now/1000,8,24);requestAnimationFrame(frame);}requestAnimationFrame(frame);
+</script></html>

@@ -21,13 +21,13 @@ Follow nine mint arches in order: climb the ridge, cross the narrow wooden bridg
 
 **Clifftop**, **Bridge start**, and **Village traffic** skip to practice sections. **R** restarts the course. Slow before corners, match wheel power on the bridge, and keep right through the village.
 
-Traffic uses two depot-to-depot routes with curved entry and exit roads. Up to six cars share a recycled pool, spawning at least 45 metres from the player and disappearing only inside an exit depot more than 35 metres away. Cars target 8 m/s, brake for vehicles ahead, show brake lights, and physically collide. Their lane-following rigid proxies are stabilized vertically, not full suspension vehicles; they do not yet overtake, signal, or navigate around blockages. Depots and trees are decorative; village shops have collision proxies. Traffic freezes with pause/help/results and resets with practice shortcuts and new rounds.
+Traffic uses two depot-to-depot routes with curved entry and exit roads. Up to six cars share a recycled pool, spawning at least 45 metres from the player and disappearing only inside an exit depot more than 35 metres away. Cars target 8 m/s, brake for vehicles ahead, show brake lights, and physically collide. Their lane-following rigid proxies are stabilized vertically, not full suspension vehicles; they do not yet overtake, signal, or navigate around blockages. Depot walls and roofs, tree trunks, and village shops have player collision proxies. Traffic freezes with pause/help/results and resets with practice shortcuts and new rounds.
 
 The chase camera follows the car's heading with a level horizon during tumbles. Its distance is adjustable alongside response lag, turning, and grip. The HUD shows height above the yard and tire contact.
 
 Cannon-es simulates a compound rigid chassis with four suspension rays and surface-projected tire forces. Grounded steering assistance keeps the differential controls approachable. Airborne cars retain angular momentum and can pitch, roll, bounce, and land. A settled overturned car automatically returns to its last safe checkpoint after 1.8 seconds; an upright landing remains playable on the lower ground. Water falls damp motion and recover to the last checkpoint after brief submersion. The lake has a recessed bed, not an invisible driveable surface. Camera motion does not rotate with chassis roll.
 
-Road widths, bridge rails, and lake bounds are shared between rendering and physics. This is an arcade handling prototype, not a full tire or drivetrain simulation. Cones use lightweight knock-over effects; the car, road, bridge rails, barriers, and building proxies participate in physics. Some scenery (trees, gate arches, and support pillars) remains decorative. Practice completion has no score or timer yet.
+Road widths, bridge rails, and lake bounds are shared between rendering and physics. This is an arcade handling prototype, not a full tire or drivetrain simulation. Cones use lightweight knock-over effects; the car, road, bridge rails, barriers, trunks, and building proxies participate in physics. Tree foliage, gate arches, and support pillars remain decorative. Mountains are distant backdrops placed wholly beyond the fenced play area; driveable hillside terrain is deferred. Practice completion has no score or timer yet.
 
 ## Three-player playtest
 
@@ -46,3 +46,5 @@ Run `npm test` for physics and gate checks. Dynamics use a fixed 120 Hz update i
 With the server running, open http://127.0.0.1:4173/tests/browser.html and click **Run checks** for browser integration checks. Keep that tab active while it drives up the hill and across the bridge and checks controls, tuning, shortcuts, pause, sabotage and rounds. Node tests cover all nine gates, recovery physics, traffic lifecycle, spawn/despawn proximity, braking and collisions. Scripted checks do not replace a group handling playtest.
 
 Next uncertainties: driving-role design and a group fun/handling playtest. Gamepads, balanced scoring, drawbridge and tunnel/overpass sections remain open; see MILESTONES.md.
+
+For visual regression checks, open `/tests/scenery.html`: inspect the downhill finish, orchard bend and garage wall joints, optionally with an orbiting camera. Scenery unit tests guard mountain clearance, non-overlapping garage geometry, trunk collisions, and rotated garage entrances/back walls.
