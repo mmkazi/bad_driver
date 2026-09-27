@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Bad Driver browser smoke checks</title>
+<style>body{font:14px system-ui;background:#f3f0e7;color:#29352f;margin:20px}iframe{width:100%;height:780px;border:1px solid #bbb}button{padding:12px}li{margin:7px 0}</style>
+<h1>Browser integration checks</h1><p>Exercises real keyboard handlers, HUD, practice progression, tuning, pause, and reset in the embedded game.</p><button id="run">Run checks</button><ol id="results"></ol><iframe src="/" title="Game under test"></iframe>
+<script type="module">
+const frame=document.querySelector('iframe'),button=document.querySelector('button'),results=document.querySelector('ol');
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+button.onclick=async()=>{
+  button.disabled=true;results.textContent='';
+  const win=frame.contentWindow,doc=frame.contentDocument,$=id=>doc.getElementById(id);
+  const key=(code,type='keydown')=>win.dispatchEvent(new win.KeyboardEvent(type,{code,bubbles:true}));
+  const check=(condition,message)=>{const li=document.createElement('li');li.textContent=(condition?'PASS: ':'FAIL: ')+message;results.append(li);if(!condition)throw new Error(message);};
+  try{
+    check($('game').width>0&&$('loadError').hidden,'3D canvas initializes without a renderer error');
+    $('game').dispatchEvent(new win.PointerEvent('pointerdown',{bubbles:true}));
+    $('resetButton').click();key('KeyW');key('ArrowUp');await wait(1100);
+    check(Number($('speed').textContent)>10,'Shared accelerators drive the car');
+    check(parseInt($('leftPercent').textContent)>75&&$('leftPercent').textContent===$('rightPercent').textContent,'Both wheel gauges show matching ramped power');
+    await wait(3100);key('KeyW','keyup');key('ArrowUp','keyup');
+    check($('lessonNumber').textContent==='02 / 09','Driving through gate one advances the practice challenge');
+    key('KeyW');key('ArrowUp');
+    const climbDeadline=performance.now()+8000;
+    while($('lessonNumber').textContent!=='03 / 09'&&performance.now()<climbDeadline)await wait(50);
+    key('KeyW','keyup');key('ArrowUp','keyup');
+    check($('lessonNumber').textContent==='03 / 09'&&parseFloat($('altitude').textContent)>7,'Suspension climbs the hill and reaches the elevated checkpoint');
+    key('Escape');const pausedSpeed=$('speed').textContent;await wait(350);
+    check(!$('pauseOverlay').hidden&&$('speed').textContent===pausedSpeed,'Pause freezes the simulation');
+    $('resumeButton').click();$('resetButton').click();await wait(60);
+    check($('speed').textContent==='0'&&$('lessonNumber').textContent==='01 / 09','Reset clears motion and practice progress');
+    $('soloMode').click();key('KeyW');await wait(700);key('KeyW','keyup');
+    check(Number($('speed').textContent)>3&&$('leftPercent').textContent===$('rightPercent').textContent,'Solo throttle powers both sides');
+    key('KeyD');await wait(300);key('KeyD','keyup');
+    check(parseInt($('leftPercent').textContent)>parseInt($('rightPercent').textContent),'Solo steering changes the power balance');
+    $('response').value='1.1';$('response').dispatchEvent(new win.Event('input',{bubbles:true}));
+    check($('responseValue').value==='1.10 s','Response slider updates the displayed tuning');
+    $('defaultsButton').click();check($('responseValue').value==='0.45 s','Handling reset restores defaults');
+    $('helpButton').click();check($('helpDialog').open&&!$('pauseOverlay').hidden,'Instructions pause the car');
+    $('closeHelp').click();await wait(40);check(!$('helpDialog').open&&$('pauseOverlay').hidden,'Closing instructions restores play');
+    $('resetButton').click();$('sharedMode').click();key('KeyW');await wait(250);win.dispatchEvent(new win.Event('blur'));await wait(50);
+    check(!$('pauseOverlay').hidden,'Losing focus pauses the car');
+    $('resumeButton').click();await wait(1400);
+    check(parseInt($('leftPercent').textContent)<3,'Focus loss clears held throttle');
+    $('cliffButton').click();await wait(200);
+    check(parseFloat($('altitude').textContent)>7.5&&$('lessonNumber').textContent==='03 / 09','Clifftop shortcut places the car on the high road');
+    $('cameraDistance').value='25';$('cameraDistance').dispatchEvent(new win.Event('input',{bubbles:true}));
+    check($('cameraDistanceValue').value==='25 m','Chase camera distance is adjustable');
+    $('defaultsButton').click();
+    check($('cameraDistanceValue').value==='18 m','Reset restores the camera distance');
+    $('bridgeButton').click();await wait(200);
+    check($('lessonNumber').textContent==='04 / 09'&&parseFloat($('altitude').textContent)>2,'Bridge shortcut reaches the narrow approach');
+    key('KeyW');key('ArrowUp');
+    const bridgeDeadline=performance.now()+10000;
+    while($('lessonNumber').textContent!=='06 / 09'&&performance.now()<bridgeDeadline)await wait(50);
+    key('KeyW','keyup');key('ArrowUp','keyup');
+    check($('lessonNumber').textContent==='06 / 09','The car crosses the water bridge and reaches the woodland checkpoint');
+    check($('routeMap').width===130,'The route map is available');
+    $('trafficButton').click();await wait(250);
+    check($('lessonNumber').textContent==='07 / 09'&&parseInt($('trafficCount').textContent)>0,'Village shortcut starts visible traffic and selects the village checkpoint');
+    key('Escape');const trafficCount=$('trafficCount').textContent;await wait(400);
+    check($('trafficCount').textContent===trafficCount,'Traffic population is frozen during pause');$('resumeButton').click();
+    $('newRound').click();await wait(80);
+    check($('roundClock').textContent==='4:00'&&$('bridgeButton').disabled&&$('trafficButton').disabled&&$('response').disabled,'Timed rounds start fresh and lock shortcuts and tuning');
+    const shieldDeadline=performance.now()+6000;
+    while($('surgeLeft').disabled&&performance.now()<shieldDeadline)await wait(30);
+    key('KeyJ');await wait(50);
+    check(!$('sabotageWarning').hidden&&$('sabotageWarning').textContent.includes('INCOMING')&&$('sabotageWarning').textContent.includes('LEFT'),'Saboteur hotkey displays a directional warning before the surge');
+    key('Escape');const frozenWarning=$('sabotageWarning').textContent,frozenClock=$('roundClock').textContent,energy=$('mischiefMeter').value;await wait(400);
+    check($('sabotageWarning').textContent===frozenWarning&&$('roundClock').textContent===frozenClock&&$('mischiefMeter').value===energy,'Pause freezes the warning, round clock, and energy');
+    $('resumeButton').click();
+    const attackDeadline=performance.now()+3000;
+    while(!$('sabotageWarning').textContent.includes('ACTIVE')&&performance.now()<attackDeadline)await wait(30);
+    check($('sabotageWarning').textContent.includes('ACTIVE')&&parseInt($('leftPercent').textContent)>50,'Surge activates after the warning and reaches the wheels');
+    $('endRound').click();await wait(40);
+    check($('resultsDialog').open&&$('resultSabotages').textContent==='1'&&$('resultGates').textContent==='0 / 9','Ending a round shows its own results');
+    check($('sabotageWarning').hidden,'Ending a round clears active sabotage');
+    $('playAgain').click();await wait(60);
+    check(!$('resultsDialog').open&&$('roundClock').textContent==='4:00'&&$('surgeLeft').disabled,'Replay starts a fresh protected round');
+    $('endRound').click();$('backPractice').click();await wait(60);
+    check($('roundClock').textContent==='Practice'&&!$('bridgeButton').disabled&&$('speed').textContent==='0','Back to practice unlocks exploration and resets the car');
+    button.textContent='All checks passed';
+  }catch(error){button.textContent='Checks failed';console.error(error);}
+  finally{key('KeyW','keyup');key('ArrowUp','keyup');key('KeyD','keyup');button.disabled=false;}
+};
+</script></html>

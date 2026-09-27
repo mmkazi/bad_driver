@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eeeade">
+  <title>Bad Driver — The proving ground</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='6' y='18' width='52' height='30' rx='10' fill='%23ed6946'/%3E%3Cpath d='M20 18v-8h24v8' fill='%23f7c66b'/%3E%3Ccircle cx='18' cy='48' r='7' fill='%23242d2a'/%3E%3Ccircle cx='46' cy='48' r='7' fill='%23242d2a'/%3E%3C/svg%3E">
+  <script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","cannon-es":"/node_modules/cannon-es/dist/cannon-es.js"}}</script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Bad Driver home"><span class="brand-icon">↗</span> BAD DRIVER<span class="brand-period">.</span></a>
+    <div class="edition"><span class="status-dot"></span> THE LOCALS <span class="version">BUILD 005</span></div>
+    <button id="helpButton" class="button subtle">How to play <span>?</span></button>
+  </header>
+  <main>
+    <section class="heading">
+      <div><div class="eyebrow">ONE CAR. TWO DRIVERS. ONE TERRIBLE FRIEND.</div><h1>Three’s a crowd<span>™</span></h1><p>Keep your wheels down. Keep an eye on player three.</p></div>
+      <div class="session-tag"><span>05</span><div>TAKE THE SCENIC ROUTE<small id="routeLength">9 CHECKPOINTS</small></div></div>
+    </section>
+    <div class="play-layout">
+      <section class="game-panel" aria-label="Driving practice game">
+        <div id="viewport"><canvas id="game" tabindex="0" aria-label="3D driving yard. Shared controls: W and S for left wheels, up and down arrows for right wheels. Press R to reset."></canvas></div>
+        <div class="scene-top"><div class="location"><span class="live-dot"></span> SUNNY SIDE HIGHLANDS</div><div class="camera-label">CHASE CAM <span>↗</span></div></div>
+        <div class="lesson"><span id="lessonNumber">01 / 06</span><div><strong id="lessonTitle">Find your rhythm</strong><p id="lessonText">Match your power, then head for the hill.</p></div><span id="lessonCheck">↗</span></div>
+        <div id="toast" class="toast" role="status" aria-live="polite">All wheels, questionable intentions.</div>
+        <div id="sabotageWarning" class="sabotage-warning" role="status" hidden></div>
+        <div class="speed-readout"><span id="speed">0</span><div>KM/H<small id="motionState">READY TO ROLL</small></div></div>
+        <div class="physics-readout"><strong id="altitude">0.0 m</strong><span>HEIGHT ABOVE YARD</span><small id="groundContact">4 / 4 TIRES DOWN</small></div>
+        <div class="route-map"><span>THE LONG WAY HOME</span><canvas id="routeMap" width="130" height="103" aria-label="Course map with the car position and next checkpoint"></canvas></div>
+        <div class="scene-bottom"><button id="cliffButton" class="scene-reset">↗ Clifftop</button><button id="bridgeButton" class="scene-reset">≈ Bridge start</button><button id="trafficButton" class="scene-reset">⇄ Village traffic</button><button id="resetButton" class="scene-reset"><kbd>R</kbd> Reset car</button></div>
+        <div id="pauseOverlay" class="pause-overlay" hidden><strong>Taking a breather.</strong><span id="pauseReason">Press Escape or resume when you’re ready.</span><button id="resumeButton" class="button primary">Back to the yard ↗</button></div>
+        <div id="loadError" class="pause-overlay" hidden><strong>The yard couldn’t load.</strong><span id="errorMessage">This demo needs WebGL in a modern browser.</span></div>
+      </section>
+      <aside class="control-panel">
+        <div class="panel-title"><h2>Your crew</h2><span>2 DRIVERS + 1 MENACE</span></div>
+        <div class="round-controls"><button id="newRound" class="button primary">Start 4-minute round</button><strong id="roundClock">Practice</strong><button id="endRound" hidden>End run</button></div>
+        <p id="trafficCount" class="mode-description">THE LOCALS ARE HEADING OUT</p>
+        <div class="mode-switch" role="group" aria-label="Driving mode"><button id="sharedMode" class="active" aria-pressed="true">Shared driving</button><button id="soloMode" aria-pressed="false">Solo test</button></div>
+        <p id="modeDescription" class="mode-description">Grab a friend. Pick a side of the keyboard.</p>
+        <article class="driver-card left-driver"><div class="driver-title"><span class="driver-avatar">L</span><div><h3>Left wheels</h3><span>DRIVER ONE</span></div><span class="wheel-icon">◉</span></div><div class="key-row"><span><kbd id="leftGo">W</kbd> Accelerate</span><span><kbd id="leftBrake">S</kbd> Brake / reverse</span></div><div class="power-label"><span>WHEEL POWER</span><strong id="leftPercent">0%</strong></div><div class="power-track"><div id="leftPower" class="power-fill"></div><i id="leftTarget" title="Requested power"></i></div></article>
+        <article class="driver-card right-driver"><div class="driver-title"><span class="driver-avatar">R</span><div><h3>Right wheels</h3><span>DRIVER TWO</span></div><span class="wheel-icon">◉</span></div><div class="key-row"><span><kbd id="rightGo">↑</kbd> Accelerate</span><span><kbd id="rightBrake">↓</kbd> Brake / reverse</span></div><div class="power-label"><span>WHEEL POWER</span><strong id="rightPercent">0%</strong></div><div class="power-track"><div id="rightPower" class="power-fill"></div><i id="rightTarget" title="Requested power"></i></div></article>
+        <div class="tip"><span>↔</span><p>Equal power goes straight.<br>Unequal power makes things interesting.</p></div>
+        <section class="saboteur-panel" aria-label="Saboteur controls">
+          <div class="panel-title"><h2>The saboteur</h2><span>PLAYER THREE</span></div>
+          <div class="power-label"><span>MISCHIEF · +8 / SEC</span><strong id="mischiefValue">70 / 100</strong></div>
+          <progress id="mischiefMeter" max="100" value="70" aria-label="Mischief energy"></progress>
+          <div class="sabotage-buttons"><button id="surgeLeft"><kbd>J</kbd> Left surge <small>35 energy</small></button><button id="surgeRight"><kbd>L</kbd> Right surge <small>35 energy</small></button><button id="slippery"><kbd>K</kbd> Slippery tires <small>55 energy</small></button></div>
+          <p id="sabotageStatus">Give the drivers a head start.</p><p class="counterplay">Surge? Brake that side. Slippery? Ease off and correct early.</p>
+        </section>
+        <details class="tuning-drawer"><summary>Find your chaos · handling & camera</summary>
+        <div class="tuning-heading"><h2>Find your chaos</h2><button id="defaultsButton">Reset</button></div>
+        <div class="slider-row"><label for="response">Power response <output id="responseValue">0.45 s</output></label><input id="response" type="range" min="0.05" max="1.2" step="0.05" value="0.45"><div><span>Snappy</span><span>Delayed</span></div></div>
+        <div class="slider-row"><label for="turning">Turning strength <output id="turningValue">1.0×</output></label><input id="turning" type="range" min="0.4" max="2" step="0.1" value="1"><div><span>Gentle</span><span>Unhinged</span></div></div>
+        <div class="slider-row"><label for="grip">Tire grip <output id="gripValue">75%</output></label><input id="grip" type="range" min="0.15" max="1" step="0.05" value="0.75"><div><span>Slippery</span><span>Planted</span></div></div>
+        <div class="slider-row"><label for="cameraDistance">Chase camera <output id="cameraDistanceValue">18 m</output></label><input id="cameraDistance" type="range" min="11" max="27" step="1" value="18"><div><span>Close up</span><span>More road</span></div></div>
+        </details>
+      </aside>
+    </div>
+    <footer><span><span class="footer-dot"></span> A COOPERATIVE DRIVING EXPERIMENT</span><p>Good friends. Bad drivers.</p><span><kbd>ESC</kbd> Pause <span class="footer-divider">/</span> <kbd>R</kbd> Reset</span></footer>
+  </main>
+  <dialog id="helpDialog">
+    <button id="closeHelp" class="close-dialog" aria-label="Close instructions">×</button>
+    <div class="eyebrow">WELCOME TO THE HIGH ROAD</div><h2>Two sides.<br>A little more gravity.</h2>
+    <p>In shared mode, one driver uses <kbd>W</kbd> / <kbd>S</kbd> for the left wheels. The other uses <kbd>↑</kbd> / <kbd>↓</kbd> for the right wheels.</p>
+    <p>Hold both accelerators to go straight. More left power turns right; more right power turns left. Brake while moving forward; keep holding to reverse. Power builds and fades gradually.</p>
+    <p><b>Flying solo?</b> Switch to Solo test: <kbd>W</kbd>/<kbd>S</kbd> drive both sides, and <kbd>A</kbd>/<kbd>D</kbd> adjust the balance to turn.</p>
+    <p><b>Player three:</b> <kbd>J</kbd> surges the left wheels, <kbd>L</kbd> surges the right, and <kbd>K</kbd> makes all tires slippery. Every attack has a warning. Drivers can brake against a surge or slow down before grip drops. Energy regenerates; attacks cannot overlap.</p>
+    <p>Start a four-minute round for results. Practice shortcuts and tuning are locked during rounds. Pausing freezes traffic, the clock and all abilities. Recovery cancels attacks and grants four seconds of protection. Swap the saboteur between rounds.</p>
+    <p>Follow nine arches: climb the hill, cross the wooden bridge, wind through the forest, share the village road with two-way traffic, then climb Orchard Hill and coast toward the finish. Keep right in the village. Locals join and leave via depot roads, slow for cars ahead, and can collide with you.</p>
+    <div class="help-note"><b>Try a section:</b> Clifftop, Bridge start and Village traffic skip you ahead. Water falls and settled upside-down landings return you to the last safe checkpoint. Land upright on dry ground and keep driving. <kbd>R</kbd> restarts the whole course.</div>
+    <button id="startButton" class="button primary">Let’s make questionable decisions ↗</button>
+  </dialog>
+  <dialog id="resultsDialog" aria-labelledby="resultsTitle"><div class="eyebrow">THE FRIENDSHIP REPORT</div><h2 id="resultsTitle">Round over</h2><p id="resultsMode"></p><dl class="results-grid"><div><dt>Gates reached</dt><dd id="resultGates"></dd></div><div><dt>Elapsed time</dt><dd id="resultTime"></dd></div><div><dt>Crashes</dt><dd id="resultCrashes"></dd></div><div><dt>Recoveries</dt><dd id="resultRecoveries"></dd></div><div><dt>Sabotages used</dt><dd id="resultSabotages"></dd></div></dl><p>Swap who plays the saboteur, then try again. These are playtest stats, not a final scoring system.</p><button id="playAgain" class="button primary">New round · swap roles ↗</button><button id="backPractice" class="button">Back to practice</button></dialog>
+  <link rel="stylesheet" href="/src/style.css">
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
