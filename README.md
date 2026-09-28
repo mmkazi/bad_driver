@@ -6,6 +6,14 @@ A local cooperative driving experiment. Build 005 expands the route to 1,191 met
 
 Requires Node.js 20+ and a modern browser with WebGL. Install with `npm install` (or `pnpm install`), then `npm start`. Open http://127.0.0.1:4173. The server only listens on your own computer. No account or backend is required. All game rendering assets are generated locally; Google Fonts is optional and has system-font fallbacks.
 
+## Publish with GitHub Pages
+
+In the GitHub repository, open **Settings → Pages → Build and deployment → Source** and select **GitHub Actions**. Push to `main` (or manually run **Deploy demo to GitHub Pages** from the Actions tab). The workflow installs locked dependencies, runs tests, builds the static game, then deploys it. No personal token or server is needed for the workflow.
+
+For this repository, the expected address after a successful deployment is **https://mmkazi.github.io/bad_driver/**. The Actions deployment result provides the actual published URL. Future pushes to `main` update the demo automatically. This is shared-keyboard play on one computer, not online multiplayer.
+
+`npm run build` creates an ignored `dist/` directory containing only the playable HTML, game modules/styles, browser dependencies and their licenses. Relative asset URLs work at `/bad_driver/` or another subdirectory. Source, test pages, Git metadata and the development server are not deployed. Local `npm start` remains unchanged; visit `/dist/index.html` on the local server to preview the packaged version.
+
 ## Controls
 
 | Action | Shared driving | Solo test |
