@@ -1,5 +1,5 @@
 import * as CANNON from 'cannon-es';
-import { ROAD_SEGMENTS, ROAD_THICKNESS, CLIFF_START, GATES, LAKE, BOUNDS, BRIDGE_RAILS, inLake } from './course.js';
+import { ROAD_SEGMENTS, BRANCH_SEGMENTS, SHORTCUT_POSTS, ROAD_THICKNESS, CLIFF_START, GATES, LAKE, BOUNDS, BRIDGE_RAILS, inLake } from './course.js';
 import { createTraffic, tickTraffic } from './traffic.js';
 
 export { CLIFF_START, GATES };
@@ -35,13 +35,13 @@ export function createCar({course=true,obstacles=[],traffic=false}={}){
     terrain(LAKE.minX,LAKE.maxX,LAKE.maxZ,BOUNDS.maxZ);
     terrain(LAKE.minX,LAKE.maxX,LAKE.minZ,LAKE.maxZ,LAKE.bottom);
   }else terrain(BOUNDS.minX,BOUNDS.maxX,BOUNDS.minZ,BOUNDS.maxZ);
-  if(course)for(const s of ROAD_SEGMENTS){
+  if(course)for(const s of [...ROAD_SEGMENTS,...BRANCH_SEGMENTS]){
     const q=new CANNON.Quaternion();q.setFromEuler(s.pitch,s.yaw,0,'YXZ');const n=q.vmult(UP);
     staticBox(world,new CANNON.Vec3(s.width/2,ROAD_THICKNESS/2,s.length/2+.12),
       new CANNON.Vec3(s.x-n.x*ROAD_THICKNESS/2,s.y-n.y*ROAD_THICKNESS/2,s.z-n.z*ROAD_THICKNESS/2),q);
   }
   if(course)for(const rail of BRIDGE_RAILS)staticBox(world,new CANNON.Vec3(rail.width/2,rail.height/2,rail.depth/2),new CANNON.Vec3(rail.x,rail.y,rail.z));
-  for(const o of obstacles){
+  for(const o of [...obstacles,...(course?SHORTCUT_POSTS:[])]){
     if(o.kind==='cone')continue;
     const height=o.height??(o.kind==='building'?6:1.5);
     const q=new CANNON.Quaternion();q.setFromEuler(0,o.yaw||0,0);
@@ -75,7 +75,7 @@ export function respawnCar(car,spawn=car.checkpoint){
   b.quaternion.setFromEuler(0,-spawn.yaw,0);b.previousQuaternion.copy(b.quaternion);b.interpolatedQuaternion.copy(b.quaternion);
   b.velocity.setZero();b.angularVelocity.setZero();b.force.setZero();b.torque.setZero();
   b.aabbNeedsUpdate=true;b.wakeUp();car.world.broadphase.dirty=true;
-  car.left=car.right=car.overturnedTime=car.airTime=car.hit=car.impact=car.waterTime=0;
+  car.left=car.right=car.steer=car.overturnedTime=car.airTime=car.hit=car.impact=car.waterTime=car.arcadeDisruption=0;
   car.grounded=0;car.yaw=spawn.yaw;car.respawned=true;syncState(car);
 }
 
@@ -83,13 +83,15 @@ export function respawnCar(car,spawn=car.checkpoint){
 // Airborne motion has gravity and angular momentum, with no orientation snap.
 export function stepCar(car,input,tune,dt,effects={}){
   const b=car.body;car.respawned=false;car.impact=0;
+  car.arcadeDisruption=Math.max(0,(car.arcadeDisruption||0)-dt);
+  car.steer=((car.steer||0)+((input.steer||0)-(car.steer||0))*(1-Math.exp(-dt/(input.arcade?.07:.14))));
   const ramp=1-Math.exp(-dt/Math.max(.05,tune.response));
   car.left+=(input.left-car.left)*ramp;car.right+=(input.right-car.right)*ramp;
   car.leftDrive=car.left+(effects.surgeSide==='left'?.65:0);
   car.rightDrive=car.right+(effects.surgeSide==='right'?.65:0);
   const gripFactor=effects.gripFactor??1;
   const up=b.quaternion.vmult(UP),forward=b.quaternion.vmult(FORWARD);
-  let contacts=0;const normalSum=new CANNON.Vec3();
+  let contacts=0,arcadeTarget=null;const normalSum=new CANNON.Vec3();
   for(let i=0;i<WHEELS.length;i++){
     const relative=b.quaternion.vmult(WHEELS[i]),origin=b.position.vadd(relative),end=origin.vadd(up.scale(-1.8));
     const result=new CANNON.RaycastResult();car.wheelHeights[i]=.48;
@@ -105,19 +107,37 @@ export function stepCar(car,input,tune,dt,effects={}){
     const along=velocity.dot(tangent),sideways=velocity.dot(right);
     let power=i<2?car.leftDrive:car.rightDrive;
     if(Math.sign(power)!==Math.sign(along)&&Math.abs(along)>.5)power*=1.7;
-    const traction=power*MASS*10/4-along*Math.abs(along)*MASS*.009/4-along*MASS*.12/4;
+    const traction=power*MASS*(input.arcade?21:10)/4-along*Math.abs(along)*MASS*(input.arcade?.012:.009)/4-along*MASS*.12/4;
     const lateral=clamp(-sideways*MASS*(2+tune.grip*9)*gripFactor/4,-spring*(.5+tune.grip)*gripFactor,spring*(.5+tune.grip)*gripFactor);
-    const force=tangent.scale(clamp(traction,-spring*1.6,spring*1.6)).vadd(right.scale(lateral));
+    const tractionLimit=spring*(input.arcade?3.2:1.6);
+    const force=tangent.scale(clamp(traction,-tractionLimit,tractionLimit)).vadd(right.scale(lateral));
     const tirePoint=b.quaternion.vmult(new CANNON.Vec3(WHEELS[i].x,-.35,WHEELS[i].z));b.applyForce(force,tirePoint);
   }
   if(contacts>=2&&up.y>.35){
     normalSum.normalize();const speed=Math.abs(b.velocity.dot(forward));
-    const target=-(car.leftDrive-car.rightDrive)*tune.turning*(.35+Math.min(speed/13,1)*.7);
+    const target=input.arcade
+      ? -car.steer*Math.sign(b.velocity.dot(forward))*Math.min(speed/6,1)*Math.min(1.375,7/Math.max(speed,1))*tune.turning
+      : -(car.leftDrive-car.rightDrive)*tune.turning*(.35+Math.min(speed/13,1)*.7);
     const current=b.angularVelocity.dot(normalSum);
     b.torque.vadd(normalSum.scale((target-current)*b.inertia.y*4*contacts/4*Math.sqrt(gripFactor)),b.torque);
+    if(input.arcade&&contacts>=3&&up.y>.8&&car.arcadeDisruption===0&&gripFactor===1){
+      arcadeTarget=target;
+      // Arcade lane following only while supported. Never straighten airborne
+      // cars or erase the immediate spin from a collision / grip-loss effect.
+      const tangent=forward.vsub(normalSum.scale(forward.dot(normalSum)));tangent.normalize();
+      const side=tangent.cross(normalSum);side.normalize();
+      b.velocity.vsub(side.scale(b.velocity.dot(side)*(1-Math.exp(-dt*14))),b.velocity);
+      b.angularVelocity.vadd(normalSum.scale((target-current)*(1-Math.exp(-dt*12))),b.angularVelocity);
+      const tilt=up.cross(normalSum),yawVelocity=normalSum.scale(b.angularVelocity.dot(normalSum));
+      const rocking=b.angularVelocity.vsub(yawVelocity);
+      b.torque.vadd(new CANNON.Vec3((tilt.x*16-rocking.x*6)*b.inertia.x,(tilt.y*16-rocking.y*6)*b.inertia.y,(tilt.z*16-rocking.z*6)*b.inertia.z),b.torque);
+    }
   }
   if(car.traffic)tickTraffic(car.traffic,{x:b.position.x,y:b.position.y,z:b.position.z},dt);
   car.world.step(dt);car.grounded=contacts;car.airTime=contacts===0?car.airTime+dt:0;
+  if(arcadeTarget!==null&&car.impact<=2){
+    b.angularVelocity.vadd(normalSum.scale(arcadeTarget-b.angularVelocity.dot(normalSum)),b.angularVelocity);
+  }
   syncState(car);car.distance+=car.speed*dt;car.hit=Math.max(0,car.hit-dt*3);
   for(const o of car.obstacles){
     if(o.kind!=='cone'||o.knocked||Math.abs(car.y-(o.y||0))>2)continue;
@@ -127,7 +147,7 @@ export function stepCar(car,input,tune,dt,effects={}){
   const restingContact=car.world.contacts.some(c=>c.bi===b||c.bj===b);
   const overturned=car.upY<.25&&restingContact&&b.velocity.length()<3;
   car.overturnedTime=overturned?car.overturnedTime+dt:0;
-  const impact=car.impact;if(impact>2)car.hit=1;
+  const impact=car.impact;if(impact>2){car.hit=1;car.arcadeDisruption=.8;}
   const submerged=car.course&&inLake(car.x,car.z)&&b.position.y<LAKE.surface+.65;
   car.waterTime=submerged?car.waterTime+dt:0;
   if(submerged){b.velocity.scale(Math.exp(-dt*3),b.velocity);b.angularVelocity.scale(Math.exp(-dt*2),b.angularVelocity);}

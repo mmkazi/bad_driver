@@ -1,8 +1,39 @@
 # Bad Driver
 
-A local cooperative driving experiment. Build 005 expands the route to 1,191 metres and nine checkpoints, adding village traffic, depot ramps, forest bends, an orchard hill and a downhill finish. The saboteur controls remain unchanged while the group's driving-role discussion is pending.
+A local cooperative driving experiment. Build 006 adds an alternative Everyone drives scheme and a forest fork to the 1,191-metre main route. The original Split wheels scheme, tuning and sabotage powers remain available.
 
-## Run
+## Everyone drives experiment
+
+Select **Everyone drives**, choose 2–4 players, and adjust individual weights if desired. Every seat has full steering, accelerator and brake/reverse. The final active seat is the known saboteur and uses ordinary controls rather than ability buttons.
+
+| Seat | Gas | Brake / reverse | Steer |
+| --- | --- | --- | --- |
+| P1 | W | S | A / D |
+| P2 | Up | Down | Left / Right |
+| P3 | I | K | J / L |
+| P4 | T | G | F / H |
+
+Presets: four seats = .5 / .5 / .5 / .5; three = .8 / .8 / .6; two = 1.4 / .7. Inputs are summed, not averaged: three .5 inputs versus one opposing .5 input produce exactly normal strength. Above ±1, a soft limit approaches ±1.35. Gas and opposing brake cancel in the same signed drive channel; hold net braking through a stop to reverse. Steering is speed-sensitive desired yaw, with supported-car stabilization. No stationary pivoting; reverse reverses steering. Collisions briefly release stabilization and airborne rotation remains physical. Arcade handling uses a separate fixed baseline (.1-second power response, turning 1, grip 1), leaving the original handling knobs unchanged; camera distance is shared.
+
+**Solo rehearsal** uses WASD at weight 1, ignores every other seat and bypasses crew weights. It is labeled in results. This is for handling tests, not a simulated party. Keyboard rollover can prevent some simultaneous combinations; separate gamepads avoid this limitation. Click the driving view after editing inputs. Scheme, count, weights and rehearsal are locked during timed rounds.
+
+**Try the forest fork** jumps to the choice: straight follows the wide loop, left takes a shorter seven-metre cut-through lined with solid posts. Both rejoin before the same village gate, preserving checkpoint order and unique round credit. The shortcut is marked gold on the mini-map. This is one fixed risk/distance tradeoff; equally good alternatives and changing route hazards are future course experiments.
+
+## Peppier handling and controllers
+
+Everyone drives currently uses a 0.10-second throttle response, a 0.07-second steering response, arcade motor force 21 and lower drag. Its turning multiplier is 1.5, with a low-speed steering-rate cap of 1.375 rad/s. These values were tuned for quick shared-keyboard play; Split wheels keeps its original physics tuning. Driver bots target up to 23 m/s on clear road and slow for corners and hazards.
+
+Connect a standard-mapped gamepad and press a button while the page is focused. In Everyone drives, choose **Controller N** in a seat's dropdown. Left stick or D-pad steers; RT/R2 accelerates; LT/L2 brakes then reverses. Analog triggers and a 15% stick dead zone are supported. Each controller occupies one seat; keyboards, controllers and bots can mix. Controller assignments lock during rounds, disconnects pause the game, and controls must be released after assignment, recovery or resume before driving. Solo rehearsal is still WASD-only. Unmapped devices are detected but not offered until custom mapping support is added. Browser discovery follows the [Gamepad API](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API/Using_the_Gamepad_API).
+
+## Testing with bots
+
+In **Everyone drives**, click **Me + bots · WASD**. You keep P1; the other active seats become driver bots, with a saboteur bot in the final seat. Each seat can also be switched independently between Keyboard, Bot and connected controllers. Bots use the same weights and ordinary gas/brake/steering inputs as people—no extra grip or position corrections. Original Split wheels is unchanged.
+
+Driver bots update their controls every 0.2–0.35 seconds, slow for sharp turns, narrow/elevated roads and nearby traffic, and brake toward the finish. At the forest fork they guess a route for one second, release both inputs for one second, then guess again until the car commits to either route. A human can persuade them onto the other branch.
+
+Saboteur bots drive normally on safe road. Near traffic, an edge or an elevated section, they choose helping or sabotage with equal probability every 0.5–1.5 seconds. Sabotage aims toward traffic or outwards off the road. **Reveal bot decisions** exposes their current mode for testing; it is hidden by default. Bots pause with the game, reset their decisions after recovery, and are bypassed in Solo rehearsal. Controller choices lock during timed rounds. This is an intentionally imperfect, map-aware prototype, not obstacle-complete AI: it can still get stuck after a bad collision. Reset or use a practice shortcut if necessary.
+
+## Run locally
 
 Requires Node.js 20+ and a modern browser with WebGL. Install with `npm install` (or `pnpm install`), then `npm start`. Open http://127.0.0.1:4173. The server only listens on your own computer. No account or backend is required. All game rendering assets are generated locally; Google Fonts is optional and has system-font fallbacks.
 
@@ -53,6 +84,6 @@ Run `npm test` for physics and gate checks. Dynamics use a fixed 120 Hz update i
 
 With the server running, open http://127.0.0.1:4173/tests/browser.html and click **Run checks** for browser integration checks. Keep that tab active while it drives up the hill and across the bridge and checks controls, tuning, shortcuts, pause, sabotage and rounds. Node tests cover all nine gates, recovery physics, traffic lifecycle, spawn/despawn proximity, braking and collisions. Scripted checks do not replace a group handling playtest.
 
-Next uncertainties: driving-role design and a group fun/handling playtest. Gamepads, balanced scoring, drawbridge and tunnel/overpass sections remain open; see MILESTONES.md.
+Next uncertainties: driving-role design, physical-controller compatibility and a group fun/handling playtest. Balanced scoring, drawbridge and tunnel/overpass sections remain open; see MILESTONES.md.
 
 For visual regression checks, open `/tests/scenery.html`: inspect the downhill finish, orchard bend and garage wall joints, optionally with an orbiting camera. Scenery unit tests guard mountain clearance, non-overlapping garage geometry, trunk collisions, and rotated garage entrances/back walls.

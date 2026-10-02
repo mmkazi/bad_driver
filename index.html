@@ -11,13 +11,13 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/" aria-label="Bad Driver home"><span class="brand-icon">↗</span> BAD DRIVER<span class="brand-period">.</span></a>
-    <div class="edition"><span class="status-dot"></span> THE LOCALS <span class="version">BUILD 005</span></div>
+    <div class="edition"><span class="status-dot"></span> TOO MANY DRIVERS <span class="version">BUILD 006</span></div>
     <button id="helpButton" class="button subtle">How to play <span>?</span></button>
   </header>
   <main>
     <section class="heading">
-      <div><div class="eyebrow">ONE CAR. TWO DRIVERS. ONE TERRIBLE FRIEND.</div><h1>Three’s a crowd<span>™</span></h1><p>Keep your wheels down. Keep an eye on player three.</p></div>
-      <div class="session-tag"><span>05</span><div>TAKE THE SCENIC ROUTE<small id="routeLength">9 CHECKPOINTS</small></div></div>
+      <div><div class="eyebrow">ONE CAR. EVERYONE HAS AN OPINION.</div><h1>Too many drivers<span>™</span></h1><p>Share the controls. Argue about the shortcut.</p></div>
+      <div class="session-tag"><span>06</span><div>CHOOSE YOUR DIRECTION<small id="routeLength">9 CHECKPOINTS · 1 FORK</small></div></div>
     </section>
     <div class="play-layout">
       <section class="game-panel" aria-label="Driving practice game">
@@ -34,7 +34,21 @@
         <div id="loadError" class="pause-overlay" hidden><strong>The yard couldn’t load.</strong><span id="errorMessage">This demo needs WebGL in a modern browser.</span></div>
       </section>
       <aside class="control-panel">
-        <div class="panel-title"><h2>Your crew</h2><span>2 DRIVERS + 1 MENACE</span></div>
+        <div class="panel-title"><h2>Your crew</h2><span id="crewBadge">2 DRIVERS + 1 MENACE</span></div>
+        <div class="mode-switch" role="group" aria-label="Control scheme"><button id="splitScheme" class="active" aria-pressed="true">Split wheels · original</button><button id="crewScheme" aria-pressed="false">Everyone drives</button></div>
+        <section id="crewPanel" hidden aria-label="Everyone drives setup">
+          <div class="crew-options"><label>Players <select id="playerCount"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option></select></label><button id="weightDefaults">Reset weights</button></div>
+          <p class="mode-description">Each seat steers, accelerates and brakes. The final seat is the saboteur—no extra powers.</p>
+          <div id="crewSeats"></div>
+          <p id="controllerHint" class="mode-description">Connect a controller, then press a button to reveal it here. Left stick steers; RT/R2 gas, LT/L2 brake/reverse.</p>
+          <button id="fillBots" class="button">Me + bots · WASD</button>
+          <p class="mode-description">Bots share your weighted controls, hesitate at forks and fear traffic and drops. The last seat's bot sometimes steers into danger. Reset keeps your crew.</p>
+          <label class="rehearsal"><input id="revealBots" type="checkbox"> Reveal bot decisions (testing)</label>
+          <label class="rehearsal"><input id="crewRehearsal" type="checkbox"> Solo rehearsal: WASD controls a normal car</label>
+          <p class="mode-description">Shared keyboard: ↑/W/I/T gas, ↓/S/K/G brake then reverse. Keyboard rollover may limit simultaneous inputs.</p>
+          <output id="crewMix" class="crew-mix">Drive +0.00 · Turn +0.00</output>
+          <button id="forkButton" class="button">Try the forest fork ↗</button>
+        </section>
         <div class="round-controls"><button id="newRound" class="button primary">Start 4-minute round</button><strong id="roundClock">Practice</strong><button id="endRound" hidden>End run</button></div>
         <p id="trafficCount" class="mode-description">THE LOCALS ARE HEADING OUT</p>
         <div class="mode-switch" role="group" aria-label="Driving mode"><button id="sharedMode" class="active" aria-pressed="true">Shared driving</button><button id="soloMode" aria-pressed="false">Solo test</button></div>
@@ -63,6 +77,9 @@
   <dialog id="helpDialog">
     <button id="closeHelp" class="close-dialog" aria-label="Close instructions">×</button>
     <div class="eyebrow">WELCOME TO THE HIGH ROAD</div><h2>Two sides.<br>A little more gravity.</h2>
+    <p><b>New: Everyone drives.</b> Choose 2–4 players. P1 uses WASD, P2 arrows, P3 IJKL, P4 TFGH. Each gets full steering, gas and brake/reverse; the final active seat is the known saboteur. Inputs are weighted and summed, not averaged. Above normal input, a soft limit caps agreement at about 1.35×. Normal steering is stable and speed-sensitive; collisions and falls remain physical. Extra sabotage powers are disabled in this mode.</p>
+    <p>Weights start at 0.5 each for four players, 0.8 / 0.8 / 0.6 for three, and 1.4 / 0.7 for two. Adjust them before a round. <b>Solo rehearsal</b> bypasses weights and inactive seats: WASD controls one arcade car. Or choose Bot or a connected standard controller for each seat. Gamepads use left stick/D-pad steering, RT/R2 gas, and LT/L2 brake/reverse. Click the driving view after editing settings.</p>
+    <p><b>Try the forest fork</b> skips ahead: straight follows the longer, wide loop; left takes a shorter, narrow cut-through. Both rejoin before the village checkpoint. This first fork is a fixed tradeoff, not yet a changing traffic/puzzle choice.</p>
     <p>In shared mode, one driver uses <kbd>W</kbd> / <kbd>S</kbd> for the left wheels. The other uses <kbd>↑</kbd> / <kbd>↓</kbd> for the right wheels.</p>
     <p>Hold both accelerators to go straight. More left power turns right; more right power turns left. Brake while moving forward; keep holding to reverse. Power builds and fades gradually.</p>
     <p><b>Flying solo?</b> Switch to Solo test: <kbd>W</kbd>/<kbd>S</kbd> drive both sides, and <kbd>A</kbd>/<kbd>D</kbd> adjust the balance to turn.</p>

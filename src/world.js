@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TRAFFIC_ROUTES, sampleRoute } from './traffic.js';
 import { MOUNTAINS, GARAGE_PARTS, garageColliders, treeCollider } from './scenery.js';
 import { GATES } from './physics.js';
-import { ROAD_SEGMENTS, ROAD_POINTS, ROAD_WIDTH, ROAD_THICKNESS, LAKE, BOUNDS, FINISH, BRIDGE_RAILS, inLake } from './course.js';
+import { ROAD_SEGMENTS, ROAD_POINTS, BRANCH_POINTS, BRANCH_SEGMENTS, SHORTCUT_POSTS, ROAD_WIDTH, ROAD_THICKNESS, LAKE, BOUNDS, FINISH, BRIDGE_RAILS, inLake } from './course.js';
 
 const colors = { grass: 0xb6c79a, road: 0x7c897d, cream: 0xf8efd8, orange: 0xe78350, dark: 0x33473f, mint: 0x7dd4ad };
 const materials = new Map();
@@ -74,26 +74,28 @@ export function createWorld(canvas) {
   const cameraObstacles=[];
   const obstacles = [], cones = [], gates = [];
   // A continuous ribbon avoids coplanar overlap seams on the curved deck.
-  function roadRibbon(offset,width,color,lift){
+  function roadRibbon(offset,width,color,lift,route=ROAD_POINTS){
     const vertices=[],indices=[];
-    ROAD_POINTS.forEach((point,i)=>{
-      const before=ROAD_POINTS[Math.max(0,i-1)],after=ROAD_POINTS[Math.min(ROAD_POINTS.length-1,i+1)];
+    route.forEach((point,i)=>{
+      const before=route[Math.max(0,i-1)],after=route[Math.min(route.length-1,i+1)];
       const dx=after.x-before.x,dz=after.z-before.z,length=Math.hypot(dx,dz);
       const rx=-dz/length,rz=dx/length;
       for(const side of [1,-1]){
         const distance=(typeof offset==='function'?offset(point):offset)+side*(typeof width==='function'?width(point):width)/2;
         vertices.push(point.x+rx*distance,point.y+.015+lift,point.z+rz*distance);
       }
-      if(i<ROAD_POINTS.length-1){const a=i*2;indices.push(a,a+2,a+1,a+2,a+3,a+1);}
+      if(i<route.length-1){const a=i*2;indices.push(a,a+2,a+1,a+2,a+3,a+1);}
     });
     const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geometry.setIndex(indices);geometry.computeVertexNormals();
-    ROAD_POINTS.slice(0,-1).forEach((p,i)=>geometry.addGroup(i*6,6,p.section==='bridge'&&typeof width==='function'?1:0));
+    route.slice(0,-1).forEach((p,i)=>geometry.addGroup(i*6,6,p.section==='bridge'&&typeof width==='function'?1:0));
     const mesh=new THREE.Mesh(geometry,[material(color),material(0xb49a72)]);mesh.receiveShadow=true;mesh.castShadow=true;scene.add(mesh);return mesh;
   }
   cameraObstacles.push(roadRibbon(0,p=>p.width,0x79867e,0));
   roadRibbon(p=>-p.width/2+.3,.35,0xe9c897,.025);roadRibbon(p=>p.width/2-.3,.35,0xe9c897,.025);
+  cameraObstacles.push(roadRibbon(0,p=>p.width,0xa39474,0,BRANCH_POINTS));
+  roadRibbon(-3.2,.2,0xf2d49a,.025,BRANCH_POINTS);roadRibbon(3.2,.2,0xf2d49a,.025,BRANCH_POINTS);
   const hiddenTop=new THREE.MeshStandardMaterial({visible:false});
-  for(const segment of ROAD_SEGMENTS){
+  for(const segment of [...ROAD_SEGMENTS,...BRANCH_SEGMENTS]){
     const roadGroup=new THREE.Group();scene.add(roadGroup);
     roadGroup.position.set(segment.x,segment.y,segment.z);
     roadGroup.rotation.set(segment.pitch,segment.yaw,0,'YXZ');
@@ -131,6 +133,10 @@ export function createWorld(canvas) {
   sign(145,2,23,Math.PI/2,'KEEP IT STEADY');
   sign(180,0,67,Math.PI,'WOODLAND LOOP  →');
   sign(82,0,112,-Math.PI/2,'VILLAGE LOOP');
+  sign(64,0,95,-Math.PI/2,'STRAIGHT: WIDE LOOP');
+  sign(48,0,115,-Math.PI/2,'← SHORT / NARROW');
+  sign(28,0,133,Math.PI,'BOTH WAYS REJOIN');
+  for(const p of SHORTCUT_POSTS){box(scene,.8,1.2,.8,0x9d805b,p.x,.6,p.z);box(scene,.83,.15,.83,0xf1d49c,p.x,1.05,p.z);}
   sign(20,0,166,Math.PI/2,'KEEP RIGHT');
   sign(50,0,188,Math.PI/2,'TRAFFIC MERGING');
   sign(210,0,211,Math.PI,'ORCHARD HILL');
@@ -200,7 +206,7 @@ export function createWorld(canvas) {
   }
   for (let i = 0; i < 290; i++) {
     const x = random() * 330 - 70, z = random() * 410 - 85;
-    if(inLake(x,z)||ROAD_POINTS.some(p=>Math.hypot(p.x-x,p.z-z)<p.width/2+6)||TRAFFIC_ROUTES.some(r=>r.points.some(p=>Math.hypot(p.x-x,p.z-z)<12))||(x>40&&x<130&&z>140&&z<215))continue;
+    if(inLake(x,z)||[...ROAD_POINTS,...BRANCH_POINTS].some(p=>Math.hypot(p.x-x,p.z-z)<p.width/2+6)||TRAFFIC_ROUTES.some(r=>r.points.some(p=>Math.hypot(p.x-x,p.z-z)<12))||(x>40&&x<130&&z>140&&z<215))continue;
     tree(x, z, .7 + random() * .7);
   }
   [[22,-3,.8],[27,0,1.1],[19,2,.65],[30,8,.8]].forEach(args => tree(...args));

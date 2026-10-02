@@ -72,6 +72,26 @@ export const ROAD_SEGMENTS=points.slice(0,-1).map((a,index)=>{
     length:Math.hypot(dx,dy,dz),yaw:Math.atan2(dx,dz),pitch:-Math.atan2(dy,Math.hypot(dx,dz)),index};
 });
 export const COURSE_LENGTH=ROAD_SEGMENTS.reduce((sum,s)=>sum+s.length,0);
+export const FORK_START={x:78,y:0,z:104,yaw:-Math.PI/2};
+// Narrow forest shortcut; the existing broad western loop stays intact.
+// Both choices rejoin before SHARE THE ROAD, so gate order is identical.
+export const BRANCH_POINTS=[];
+for(const [a,b,c,d] of [
+  [[48,104],[20,104],[20,126],[20,140]],
+  [[20,140],[20,158],[-8,176],[16,176]],
+])for(let i=0;i<40;i++){
+  const t=i/40,u=1-t;BRANCH_POINTS.push({x:u*u*u*a[0]+3*u*u*t*b[0]+3*u*t*t*c[0]+t*t*t*d[0],z:u*u*u*a[1]+3*u*u*t*b[1]+3*u*t*t*c[1]+t*t*t*d[1],y:.045,width:7,section:'shortcut'});
+}
+BRANCH_POINTS.push({x:16,y:.045,z:176,width:7,section:'shortcut'});
+export const SHORTCUT_POSTS=BRANCH_POINTS.flatMap((p,i)=>{
+  if(i<16||i>62||i%4)return [];
+  const next=BRANCH_POINTS[i+1],dx=next.x-p.x,dz=next.z-p.z,length=Math.hypot(dx,dz);
+  return [-1,1].map(side=>({x:p.x-dz/length*side*4,z:p.z+dx/length*side*4,radius:.4,height:1.2,kind:'post'}));
+});
+export const BRANCH_SEGMENTS=BRANCH_POINTS.slice(0,-1).map((a,index)=>{
+  const b=BRANCH_POINTS[index+1],dx=b.x-a.x,dz=b.z-a.z;
+  return {x:(a.x+b.x)/2,y:.06,z:(a.z+b.z)/2,width:7,section:'shortcut',length:Math.hypot(dx,dz),yaw:Math.atan2(dx,dz),pitch:0,index};
+});
 // Rails share their dimensions between rendering and collision. Their low height
 // catches gentle mistakes, while a hard enough hit can still put a car overboard.
 export const BRIDGE_RAILS=[-1,1].flatMap(side=>Array.from({length:18},(_,i)=>({
@@ -83,7 +103,7 @@ export const GATES=Object.freeze([
   {x:42,y:0,z:3,yaw:Math.PI,label:'LAKESIDE',title:'Down to the lake',text:'Follow the ridge, descend, then bend left toward the water.',spawn:{x:42,y:0,z:7,yaw:Math.PI}},
   {x:90,y:3,z:32,yaw:Math.PI/2,halfWidth:3,label:'EASY DOES IT',title:'One car wide',text:'The road narrows to 7 metres. Match power across the bridge.',spawn:{x:91,y:3,z:32,yaw:Math.PI/2}},
   {x:151,y:7/6,z:32,yaw:Math.PI/2,label:'WOODLAND RUN',title:'Back on dry land',text:'Follow the broad right bend into the rolling woodland road.',spawn:{x:156,y:1/3,z:32,yaw:Math.PI/2}},
-  {x:64,y:0,z:104,yaw:-Math.PI/2,label:'VILLAGE AHEAD',title:'The long way round',text:'Follow the forest bends, then loop left toward the village.',spawn:{x:61,y:0,z:104,yaw:-Math.PI/2}},
+  {x:64,y:0,z:104,yaw:-Math.PI/2,label:'CHOOSE YOUR WAY',title:'Agree on a direction',text:'Straight: wide forest loop. Left: short, narrow cut-through. Both rejoin.',spawn:{x:61,y:0,z:104,yaw:-Math.PI/2}},
   {x:24,y:0,z:176,yaw:Math.PI/2,label:'SHARE THE ROAD',title:'A little company',text:'Traffic joins here. Keep right and leave room at the merges.',spawn:{x:30,y:0,z:176,yaw:Math.PI/2}},
   {x:220,y:20/11,z:222,yaw:Math.PI,label:'ORCHARD HILL',title:'One more hill',text:'Leave the village, climb the hill, then follow the right bend.',spawn:{x:220,y:25/11,z:226,yaw:Math.PI}},
   {x:72,y:0,z:280,yaw:-Math.PI/2,label:'HOME AT LAST',title:'Bring it home',text:'Roll downhill and stop inside the finish box.',spawn:{x:70,y:0,z:280,yaw:-Math.PI/2}},

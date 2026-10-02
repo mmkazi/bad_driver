@@ -9,6 +9,7 @@ button.onclick=async()=>{
   button.disabled=true;results.textContent='';
   const win=frame.contentWindow,doc=frame.contentDocument,$=id=>doc.getElementById(id);
   const key=(code,type='keydown')=>win.dispatchEvent(new win.KeyboardEvent(type,{code,bubbles:true}));
+  const gamepadDescriptor=Object.getOwnPropertyDescriptor(win.navigator,'getGamepads');
   const check=(condition,message)=>{const li=document.createElement('li');li.textContent=(condition?'PASS: ':'FAIL: ')+message;results.append(li);if(!condition)throw new Error(message);};
   try{
     check($('game').width>0&&$('loadError').hidden,'3D canvas initializes without a renderer error');
@@ -77,8 +78,55 @@ button.onclick=async()=>{
     check(!$('resultsDialog').open&&$('roundClock').textContent==='4:00'&&$('surgeLeft').disabled,'Replay starts a fresh protected round');
     $('endRound').click();$('backPractice').click();await wait(60);
     check($('roundClock').textContent==='Practice'&&!$('bridgeButton').disabled&&$('speed').textContent==='0','Back to practice unlocks exploration and resets the car');
+    $('crewScheme').click();await wait(50);
+    check(!$('crewPanel').hidden&&doc.querySelector('.saboteur-panel').hidden,'Everyone drives preserves but hides the original wheel and ability controls');
+    check(doc.querySelectorAll('#crewSeats input').length===4,'Four independent weighted seats are available');
+    key('KeyW');key('ArrowUp');key('KeyI');key('KeyG');await wait(350);
+    check($('crewMix').textContent.includes('Drive 1.00'),'Three drivers versus one braking saboteur produce normal drive input');
+    for(const code of ['KeyW','ArrowUp','KeyI','KeyG'])key(code,'keyup');
+    key('KeyJ');await wait(120);key('KeyJ','keyup');
+    check($('sabotageWarning').hidden&&$('crewMix').textContent.includes('Turn -0.50'),'IJKL steers player three without triggering old sabotage powers');
+    $('playerCount').value='2';$('playerCount').dispatchEvent(new win.Event('change'));
+    check(doc.querySelectorAll('#crewSeats input').length===2&&doc.querySelector('#crewSeats input').value==='1.4','Two-player preset configures its control weights');
+    $('forkButton').click();await wait(80);
+    check($('lessonNumber').textContent==='06 / 09','Fork shortcut preserves the common checkpoint sequence');
+    $('crewRehearsal').checked=true;$('crewRehearsal').dispatchEvent(new win.Event('change'));key('KeyW');await wait(650);key('KeyW','keyup');
+    check(Number($('speed').textContent)>3&&$('crewMix').textContent.includes('REHEARSAL'),'Solo rehearsal drives the normal-strength arcade car');
+    $('newRound').click();await wait(50);
+    check($('crewScheme').disabled&&$('playerCount').disabled&&$('forkButton').disabled&&doc.querySelector('#crewSeats input').disabled,'Rounds lock the crew scheme, weights and fork shortcut');
+    $('endRound').click();$('backPractice').click();$('splitScheme').click();await wait(50);
+    check($('crewPanel').hidden&&!doc.querySelector('.saboteur-panel').hidden&&!$('sharedMode').disabled,'Original split-wheel mode remains available after crew rounds');
+    $('crewScheme').click();$('resetButton').click();$('fillBots').click();await wait(1100);
+    check(doc.querySelectorAll('#crewSeats select')[0].value==='human'&&doc.querySelectorAll('#crewSeats select')[1].value==='bot'&&!$('crewRehearsal').checked,'Me + bots keeps P1 human and fills the other seats');
+    check(Number($('speed').textContent)>1&&$('botStatus1').textContent.includes('Gas'),'Bot inputs drive through the normal weighted controls');
+    key('Escape');const frozen=$('crewMix').textContent;await wait(400);
+    check($('crewMix').textContent===frozen,'Pause freezes bot-driven inputs');key('Escape');
+    $('newRound').click();await wait(60);
+    check($('fillBots').disabled&&doc.querySelector('#crewSeats select').disabled,'Rounds lock bot controller choices');
+    $('endRound').click();$('backPractice').click();
+    $('crewRehearsal').checked=true;$('crewRehearsal').dispatchEvent(new win.Event('change'));await wait(100);
+    check($('botStatus1').textContent.includes('bypassed')&&$('crewMix').textContent.includes('Drive 0.00'),'Rehearsal bypasses bots');
+    $('crewRehearsal').checked=false;$('crewRehearsal').dispatchEvent(new win.Event('change'));
+    for(const select of doc.querySelectorAll('#crewSeats select')){select.value='human';select.dispatchEvent(new win.Event('change'));}
+    // Use fresh elements because changing a controller rerenders seat options.
+    const second=doc.querySelectorAll('#crewSeats select')[1];second.value='human';second.dispatchEvent(new win.Event('change'));
+    $('resetButton').click();
+    const pad={index:0,id:'Simulated standard controller',mapping:'standard',connected:true,axes:[0,0],buttons:Array.from({length:17},()=>({value:0}))};
+    let connected=[pad];Object.defineProperty(win.navigator,'getGamepads',{configurable:true,value:()=>connected});await wait(80);
+    let first=doc.querySelector('#crewSeats select');
+    check(Array.from(first.options).some(o=>o.value==='pad:0'),'Connected controllers appear in seat dropdowns');
+    pad.buttons[7].value=1;first.value='pad:0';first.dispatchEvent(new win.Event('change'));await wait(180);
+    check($('botStatus0').textContent.includes('Release')&&Number($('speed').textContent)===0,'Held trigger cannot drive immediately after assignment');
+    check(Array.from(doc.querySelectorAll('#crewSeats select')[1].options).find(o=>o.value==='pad:0').disabled,'One controller cannot occupy two seats');
+    pad.buttons[7].value=0;await wait(80);pad.buttons[7].value=.8;await wait(600);
+    check(Number($('speed').textContent)>3&&$('botStatus0').textContent.includes('Gas 0.80'),'Analog controller input drives the real game');
+    connected=[];await wait(80);
+    check(!$('pauseOverlay').hidden&&doc.querySelector('#crewSeats select').textContent.includes('disconnected'),'Disconnect pauses and preserves the selected controller');
+    connected=[pad];await wait(80);$('resumeButton').click();await wait(100);
+    check($('botStatus0').textContent.includes('Release'),'Reconnect and resume require released controls');
+    $('resetButton').click();
     button.textContent='All checks passed';
   }catch(error){button.textContent='Checks failed';console.error(error);}
-  finally{key('KeyW','keyup');key('ArrowUp','keyup');key('KeyD','keyup');button.disabled=false;}
+  finally{if(gamepadDescriptor)Object.defineProperty(win.navigator,'getGamepads',gamepadDescriptor);else delete win.navigator.getGamepads;key('KeyW','keyup');key('ArrowUp','keyup');key('KeyD','keyup');button.disabled=false;}
 };
 </script></html>

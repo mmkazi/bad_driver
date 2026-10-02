@@ -1,5 +1,8 @@
-import { createCar, respawnCar, SPAWN, CLIFF_START, DEFAULTS, inputsFor, stepCar, GATES, crossedGate } from './physics.js';
-import { BRIDGE_START, TRAFFIC_START, FINISH, ROAD_POINTS, COURSE_LENGTH, LAKE } from './course.js';
+import { createCar, respawnCar as respawnPhysicsCar, SPAWN, CLIFF_START, DEFAULTS, inputsFor, stepCar, GATES, crossedGate } from './physics.js';
+import { BRIDGE_START, TRAFFIC_START, FORK_START, BRANCH_POINTS, FINISH, ROAD_POINTS, COURSE_LENGTH, LAKE } from './course.js';
+import {PRESETS,SEATS,crewInputs,mixCrew} from './crew.js';
+import {createBot,tickBot} from './bots.js';
+import {readGamepads,gatedGamepadInput} from './gamepads.js';
 import { resetTraffic } from './traffic.js';
 import { ABILITIES, createSabotage, requestSabotage, blockReason, protectCar, tickSabotage, sabotageEffects, createRound, tickRound, endRound, clockText } from './rules.js';
 
@@ -15,6 +18,74 @@ try {
 }
 let car=createCar({obstacles:world.obstacles,traffic:true}), mode='shared', paused=false, gateIndex=0, finalGateCrossed=false, stoppedTime=0, complete=false;
 const keys=new Set(), tune={...DEFAULTS};
+let scheme='split',weights=[...PRESETS[4]];
+const arcadeTune={response:.1,turning:1.5,grip:1};
+const sources=['human','human','human','human'];
+let pads=[],padSignature='';
+const armedPads=new Set();
+function controllerInput(source){
+  const index=Number(source.slice(4)),pad=pads.find(p=>p.index===index);
+  const result=gatedGamepadInput(pad,armedPads.has(index));
+  if(result.armed)armedPads.add(index);else armedPads.delete(index);
+  return result.input;
+}
+function pollControllers(){
+  pads=readGamepads();
+  const signature=JSON.stringify(pads.map(p=>[p.index,p.id,p.mapping]));
+  if(signature===padSignature)return;
+  padSignature=signature;armedPads.clear();
+  if(scheme==='crew'&&!$('crewRehearsal').checked&&sources.slice(0,weights.length).some(s=>s.startsWith('pad:')&&!pads.some(p=>`pad:${p.index}`===s&&p.mapping==='standard'))){setPaused(true);$('pauseReason').textContent='A selected controller disconnected. Reconnect it, or change that seat in practice.';}
+  renderSeats();updateSessionUI();
+  $('controllerHint').textContent=pads.some(p=>p.mapping!=='standard')?'An unmapped controller was detected. This demo supports standard-mapped gamepads only.':pads.length?'Left stick / D-pad steer · RT/R2 gas · LT/L2 brake/reverse. Release controls after assigning or resuming.':'Connect a controller, then press a button to reveal it here. Left stick steers; RT/R2 gas, LT/L2 brake/reverse.';
+}
+let bots=sources.map(()=>createBot());
+function resetBots(){bots=sources.map(()=>createBot());}
+function respawnCar(...args){resetBots();armedPads.clear();return respawnPhysicsCar(...args);}
+function currentInput(dt=0){
+  if(botRecovery!==car.recoveries){resetBots();armedPads.clear();botRecovery=car.recoveries;}
+  if(scheme==='split')return inputsFor(keys,mode);
+  if($('crewRehearsal').checked)return crewInputs(keys,[1]);
+  const players=crewInputs(keys,weights).players.map((input,i)=>sources[i]==='human'?input:sources[i].startsWith('pad:')?controllerInput(sources[i]):tickBot(bots[i],car,{role:i===weights.length-1?'saboteur':'driver',gateIndex,traffic:car.traffic.vehicles,complete},dt));
+  return mixCrew(players,weights);
+}
+let botRecovery=car.recoveries;
+function renderSeats(){
+  $('crewSeats').replaceChildren();
+  weights.forEach((weight,i)=>{
+    const seat=document.createElement('div');seat.className='crew-seat'+(i===weights.length-1?' traitor':'');
+    const label=document.createElement('label');label.textContent=`P${i+1} · ${i===weights.length-1?'SABOTEUR':'DRIVER'} · weight `;
+    const field=document.createElement('input');field.type='number';field.min='0';field.max='2';field.step='.05';field.value=weight;field.setAttribute('aria-label',`Player ${i+1} weight`);
+    field.onchange=()=>{const n=Number(field.value);weights[i]=Number.isFinite(n)?Math.max(0,Math.min(2,n)):weight;field.value=weights[i];keys.clear();};
+    label.append(field);seat.append(label);const text=document.createElement('small');text.textContent=`${SEATS[i].label} · gas / steer / brake`;seat.append(text);$('crewSeats').append(seat);
+    const source=document.createElement('select');source.setAttribute('aria-label',`Player ${i+1} controller`);
+    for(const [value,title] of [['human','Keyboard'],['bot',i===weights.length-1?'Saboteur bot':'Driver bot']]){const option=document.createElement('option');option.value=value;option.textContent=title;source.append(option);}
+    for(const pad of pads.filter(p=>p.mapping==='standard')){
+      const option=document.createElement('option');option.value=`pad:${pad.index}`;option.textContent=`Controller ${pad.index+1} · ${pad.id}`;
+      option.disabled=sources.some((s,j)=>j!==i&&j<weights.length&&s===option.value);source.append(option);
+    }
+    if(sources[i].startsWith('pad:')&&!Array.from(source.options).some(o=>o.value===sources[i])){const option=document.createElement('option');option.value=sources[i];option.textContent=`Controller ${Number(sources[i].slice(4))+1} · disconnected`;option.disabled=true;source.append(option);}
+    source.value=sources[i];source.onchange=()=>{
+      if(source.value.startsWith('pad:'))sources.forEach((s,j)=>{if(j!==i&&s===source.value)sources[j]='human';});
+      sources[i]=source.value;keys.clear();armedPads.clear();resetBots();renderSeats();updateSessionUI();
+    };seat.append(source);
+    const status=document.createElement('small');status.id=`botStatus${i}`;seat.append(status);
+  });
+  $('crewBadge').textContent=scheme==='crew'?`${weights.length-1} DRIVERS + 1 DRIVING SABOTEUR`:'2 DRIVERS + 1 MENACE';
+}
+function setScheme(next){
+  scheme=next;keys.clear();armedPads.clear();resetBots();sabotage=createSabotage();car.left=car.right=car.steer=0;
+  $('crewPanel').hidden=scheme!=='crew';
+  $('game').setAttribute('aria-label',scheme==='crew'?'3D driving course. Full controls per seat: WASD, arrow keys, IJKL, TFGH. Last active seat sabotages. R resets.':'3D driving course. Split wheels: W/S left, up/down right. J/K/L sabotage. R resets.');
+  for(const selector of ['.driver-card','.tip','.saboteur-panel','#modeDescription','[aria-label="Driving mode"]'])document.querySelectorAll(selector).forEach(el=>el.hidden=scheme==='crew');
+  for(const id of ['response','turning','grip'])$(id).closest('.slider-row').hidden=scheme==='crew';
+  for(const [id,value] of [['splitScheme','split'],['crewScheme','crew']]){$(id).classList.toggle('active',scheme===value);$(id).setAttribute('aria-pressed',String(scheme===value));}
+  renderSeats();updateSessionUI();toast(scheme==='crew'?'Everyone has a steering wheel. Agree on where to go.':'Original split-wheel controls restored.');
+}
+$('splitScheme').onclick=()=>setScheme('split');$('crewScheme').onclick=()=>setScheme('crew');
+$('playerCount').onchange=()=>{weights=[...PRESETS[$('playerCount').value]];keys.clear();armedPads.clear();resetBots();renderSeats();};
+$('weightDefaults').onclick=()=>{weights=[...PRESETS[$('playerCount').value]];keys.clear();renderSeats();};
+$('crewRehearsal').onchange=()=>{keys.clear();armedPads.clear();resetBots();car.left=car.right=car.steer=0;};
+$('fillBots').onclick=()=>{sources.fill('bot');sources[0]='human';$('crewRehearsal').checked=false;resetBots();keys.clear();renderSeats();$('game').focus();toast('You are P1 on WASD. The other seats are bots; the last one sabotages.');};
 let sabotage=createSabotage(),round=null;
 let toastTimer=0, collisionCooldown=0, lastTime=performance.now(), accumulator=0, elapsed=0;
 const FIXED=1/120;
@@ -29,7 +100,7 @@ function updateLesson(){
 function reset(){round=null;sabotage=createSabotage();resetTraffic(car.traffic);car.checkpoint={...SPAWN};respawnCar(car,SPAWN);keys.clear();gateIndex=0;finalGateCrossed=false;stoppedTime=0;complete=false;world.reset();updateLesson();toast('Fresh start. Same questionable crew.');updateHUD({left:0,right:0});}
 function cliffStart(){car.checkpoint={...CLIFF_START};respawnCar(car,CLIFF_START);keys.clear();gateIndex=2;finalGateCrossed=false;stoppedTime=0;complete=false;world.snapCamera();updateLesson();setPaused(false);toast('Eight metres up. Turn right, or investigate gravity.');}
 function bridgeStart(){car.checkpoint={...BRIDGE_START};respawnCar(car,BRIDGE_START);keys.clear();gateIndex=3;finalGateCrossed=false;stoppedTime=0;complete=false;world.snapCamera();updateLesson();setPaused(false);toast('A little less road. A lot more water.');}
-function setPaused(value){paused=value;keys.clear();accumulator=0;$('pauseOverlay').hidden=!value;$('pauseReason').textContent='Press Escape or resume when you’re ready.';}
+function setPaused(value){paused=value;keys.clear();armedPads.clear();accumulator=0;$('pauseOverlay').hidden=!value;$('pauseReason').textContent='Press Escape or resume when you’re ready.';}
 function setMode(next){mode=next;keys.clear();car.left=car.right=0;
   $('sharedMode').classList.toggle('active',mode==='shared');$('soloMode').classList.toggle('active',mode==='solo');
   $('sharedMode').setAttribute('aria-pressed',String(mode==='shared'));$('soloMode').setAttribute('aria-pressed',String(mode==='solo'));
@@ -43,10 +114,11 @@ $('cliffButton').onclick=()=>{sabotage=createSabotage();resetTraffic(car.traffic
 $('bridgeButton').onclick=()=>{sabotage=createSabotage();resetTraffic(car.traffic);bridgeStart();};
 $('trafficButton').onclick=()=>{sabotage=createSabotage();resetTraffic(car.traffic);car.checkpoint={...TRAFFIC_START};respawnCar(car,TRAFFIC_START);keys.clear();gateIndex=6;finalGateCrossed=false;stoppedTime=0;complete=false;world.snapCamera();updateLesson();setPaused(false);toast('Keep right. The locals have places to be.');};
 const results=$('resultsDialog');
-function startRound(){if(results.open)results.close();reset();round=createRound(240);setPaused(false);toast('Four minutes. Two drivers. One saboteur.');updateSessionUI();}
+$('forkButton').onclick=()=>{sabotage=createSabotage();resetTraffic(car.traffic);car.checkpoint={...FORK_START};respawnCar(car,FORK_START);keys.clear();gateIndex=5;finalGateCrossed=false;stoppedTime=0;complete=false;world.snapCamera();updateLesson();setPaused(false);toast('Straight: wide forest loop. Left: shorter, narrower cut-through.');};
+function startRound(){if(results.open)results.close();reset();round=createRound(240);setPaused(false);toast(scheme==='crew'?'Four minutes. Everyone drives—including the saboteur.':'Four minutes. Two drivers. One saboteur.');updateSessionUI();}
 function showResults(outcome){
   if(!round)return;endRound(round,outcome);keys.clear();sabotage.pending=sabotage.active=null;
-  $('resultsTitle').textContent=round.outcome;$('resultsMode').textContent=mode==='solo'?'Solo-driver test round':'Two drivers versus one saboteur';
+  $('resultsTitle').textContent=round.outcome;$('resultsMode').textContent=scheme==='crew'?($('crewRehearsal').checked?'Everyone drives · solo rehearsal':`Everyone drives · ${weights.length} seats · final seat sabotages`):mode==='solo'?'Solo-driver test round':'Two drivers versus one saboteur';
   $('resultGates').textContent=`${round.gates.size} / ${GATES.length}`;$('resultTime').textContent=clockText(round.elapsed);
   $('resultCrashes').textContent=round.crashes;$('resultRecoveries').textContent=round.recoveries;$('resultSabotages').textContent=sabotage.uses;
   updateSessionUI();if(!results.open)results.showModal();
@@ -56,7 +128,7 @@ $('endRound').onclick=()=>showResults('Run ended');
 $('backPractice').onclick=()=>{results.close();reset();setPaused(false);};
 results.addEventListener('cancel',event=>event.preventDefault());
 function attack(id){
-  if(paused||help.open||results.open||complete)return;
+  if(scheme==='crew'||paused||help.open||results.open||complete)return;
   if(!requestSabotage(sabotage,id))toast(blockReason(sabotage,id));
   updateSessionUI();
 }
@@ -64,10 +136,13 @@ $('surgeLeft').onclick=()=>attack('left');$('surgeRight').onclick=()=>attack('ri
 function updateSessionUI(){
   const locked=!!round?.running;
   for(const id of ['cliffButton','bridgeButton','trafficButton','resetButton','sharedMode','soloMode','response','turning','grip','cameraDistance','defaultsButton','newRound'])$(id).disabled=locked;
+  for(const id of ['splitScheme','crewScheme','playerCount','weightDefaults','crewRehearsal','forkButton'])$(id).disabled=locked;
+  $('fillBots').disabled=locked;
+  document.querySelectorAll('#crewSeats input, #crewSeats select').forEach(el=>el.disabled=locked);
   $('endRound').hidden=!locked;$('roundClock').textContent=locked?clockText(round.duration-round.elapsed):'Practice';
   $('mischiefValue').textContent=`${Math.floor(sabotage.energy)} / 100`;$('mischiefMeter').value=sabotage.energy;
   for(const [id,button] of [['left','surgeLeft'],['right','surgeRight'],['slip','slippery']]){
-    const reason=blockReason(sabotage,id);$(button).disabled=!!reason||paused||help.open||results.open||complete;
+    const reason=blockReason(sabotage,id);$(button).disabled=scheme==='crew'||!!reason||paused||help.open||results.open||complete;
     $(button).title=reason||`${ABILITIES[id].warning}s warning · ${ABILITIES[id].duration}s effect`;
     $(button).querySelector('small').textContent=sabotage.cooldowns[ABILITIES[id].family]>0?`${sabotage.cooldowns[ABILITIES[id].family].toFixed(1)}s cooldown`:`${ABILITIES[id].cost} energy`;
   }
@@ -90,12 +165,12 @@ const closeHelp=()=>help.close();$('closeHelp').onclick=closeHelp;$('startButton
 help.addEventListener('close',()=>setPaused(pausedBeforeHelp));
 window.addEventListener('keydown',event=>{
   if(help.open||results.open)return;
-  if(event.target instanceof HTMLInputElement)return;
+  if(event.target instanceof HTMLInputElement||event.target instanceof HTMLSelectElement)return;
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(event.code))event.preventDefault();
   if(event.repeat)return;
   if(event.code==='Escape'){setPaused(!paused);return;}
   if(event.code==='KeyR'){if(round?.running)toast('End the run to reset.');else reset();return;}
-  if(['KeyJ','KeyK','KeyL'].includes(event.code)){attack({KeyJ:'left',KeyK:'slip',KeyL:'right'}[event.code]);return;}
+  if(scheme==='split'&&['KeyJ','KeyK','KeyL'].includes(event.code)){attack({KeyJ:'left',KeyK:'slip',KeyL:'right'}[event.code]);return;}
   if(!paused)keys.add(event.code);
 });
 window.addEventListener('keyup',event=>keys.delete(event.code));
@@ -114,6 +189,15 @@ function updateHUD(input){
     $(side+'Target').style.left=`calc(${Math.abs(input[side])*100}% - 1px)`;
   }
   drawMap();
+  if(scheme==='crew'){
+    const mix=input.raw||{drive:0,steer:0};
+    $('crewMix').textContent=`${$('crewRehearsal').checked?'REHEARSAL · ':''}Drive ${mix.drive.toFixed(2)} · Turn ${mix.steer.toFixed(2)} → ${Number(input.steer||0).toFixed(2)}`;
+    weights.forEach((_,i)=>{
+      const output=input.players?.[i]||{drive:0,steer:0};
+      $(`botStatus${i}`).textContent=sources[i]!=='bot'?'':$('crewRehearsal').checked?'Bot bypassed in rehearsal':`Gas ${output.drive.toFixed(2)} · steer ${output.steer.toFixed(2)}`+($('revealBots').checked?` · ${bots[i].forkChoice&&bots[i].forkTime>=1?'yielding':bots[i].mode}`:'');
+      if(sources[i].startsWith('pad:'))$(`botStatus${i}`).textContent=$('crewRehearsal').checked?'Controller bypassed in rehearsal':!armedPads.has(Number(sources[i].slice(4)))?'Release stick and triggers to arm':`Gas ${output.drive.toFixed(2)} · steer ${output.steer.toFixed(2)}`;
+    });
+  }
   $('trafficCount').textContent=`${car.traffic.vehicles.filter(v=>v.active).length} LOCALS ON THE MOVE`;
   updateSessionUI();
 }
@@ -122,22 +206,25 @@ function drawMap(){
   const sx=x=>(x+40)/280*120+5,sz=z=>(z+75)/370*93+5;
   map.clearRect(0,0,130,103);map.fillStyle='#87bfbd';map.fillRect(sx(LAKE.minX),sz(LAKE.minZ),sx(LAKE.maxX)-sx(LAKE.minX),sz(LAKE.maxZ)-sz(LAKE.minZ));
   map.strokeStyle='#81927e';map.lineWidth=2.4;map.beginPath();ROAD_POINTS.forEach((p,i)=>i?map.lineTo(sx(p.x),sz(p.z)):map.moveTo(sx(p.x),sz(p.z)));map.stroke();
+  map.strokeStyle='#b48646';map.lineWidth=1.6;map.beginPath();BRANCH_POINTS.forEach((p,i)=>i?map.lineTo(sx(p.x),sz(p.z)):map.moveTo(sx(p.x),sz(p.z)));map.stroke();
   GATES.forEach((g,i)=>{map.fillStyle=i<gateIndex?'#488775':i===gateIndex?'#edab4b':'#e9eadb';map.beginPath();map.arc(sx(g.x),sz(g.z),2.6,0,Math.PI*2);map.fill();});
   car.traffic.vehicles.filter(v=>v.active).forEach(v=>{map.fillStyle='#467ba0';map.fillRect(sx(v.body.position.x)-1,sz(v.body.position.z)-1,2,2);});
   map.save();map.translate(sx(car.x),sz(car.z));map.rotate(car.yaw);map.fillStyle='#d65f3f';map.strokeStyle='#fff4da';map.lineWidth=1;map.beginPath();map.moveTo(0,-5);map.lineTo(3.5,3);map.lineTo(-3.5,3);map.closePath();map.fill();map.stroke();map.restore();
 }
-$('routeLength').textContent=`${Math.round(COURSE_LENGTH)} m · ${GATES.length} GATES`;
+$('routeLength').textContent=`${Math.round(COURSE_LENGTH)} m MAIN ROUTE · ${GATES.length} GATES · 1 FORK`;
 function tick(now){
+  pollControllers();
   const dt=Math.min((now-lastTime)/1000,.05);lastTime=now;
   if(!paused&&!help.open&&!results.open){
     elapsed+=dt;accumulator+=dt;collisionCooldown=Math.max(0,collisionCooldown-dt);
-    const input=inputsFor(keys,mode);
+    let input=currentInput();
     while(accumulator>=FIXED){
-      tickSabotage(sabotage,FIXED);
+      input=currentInput(FIXED);
+      if(scheme==='split')tickSabotage(sabotage,FIXED);
       const previous={x:car.x,y:car.y,z:car.z};
-      const impact=stepCar(car,input,tune,FIXED,sabotageEffects(sabotage));
+      const impact=stepCar(car,input,scheme==='crew'?arcadeTune:tune,FIXED,scheme==='crew'?{}:sabotageEffects(sabotage));
       let passedGate=null;
-      if(car.respawned){protectCar(sabotage);keys.clear();input.left=input.right=0;finalGateCrossed=false;stoppedTime=0;world.snapCamera();toast(car.recoveryReason==='water'?'Not a boat. Back to the last dry checkpoint.':'Wheels belong underneath. Back to your last safe spot.');}
+      if(car.respawned){protectCar(sabotage);keys.clear();input.left=input.right=input.steer=0;finalGateCrossed=false;stoppedTime=0;world.snapCamera();toast(car.recoveryReason==='water'?'Not a boat. Back to the last dry checkpoint.':'Wheels belong underneath. Back to your last safe spot.');}
       else if(impact>5&&collisionCooldown===0){toast('A very hands-on physics experiment.');collisionCooldown=2;}
       if(!car.respawned&&gateIndex<GATES.length&&crossedGate(previous,car,GATES[gateIndex])){
         passedGate=gateIndex;
@@ -163,4 +250,4 @@ function tick(now){
   world.render(car,paused||results.open?0:dt,elapsed,gateIndex,Number($('cameraDistance').value),car.traffic.vehicles);
   requestAnimationFrame(tick);
 }
-updateTuning();updateLesson();requestAnimationFrame(tick);
+renderSeats();updateTuning();updateLesson();requestAnimationFrame(tick);

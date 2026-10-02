@@ -10,7 +10,7 @@ if(existing?.isSymbolicLink())throw new Error('Refusing to build into a symlinke
 await rm(output,{recursive:true,force:true});
 await mkdir(output,{recursive:true});
 const files=[
-  ...['main.js','world.js','physics.js','rules.js','course.js','traffic.js','scenery.js','style.css'].map(name=>[`src/${name}`,`src/${name}`]),
+  ...['main.js','world.js','physics.js','rules.js','course.js','traffic.js','scenery.js','crew.js','bots.js','gamepads.js','style.css'].map(name=>[`src/${name}`,`src/${name}`]),
   ['node_modules/three/build/three.module.js','vendor/three.module.js'],
   ['node_modules/three/build/three.core.js','vendor/three.core.js'],
   ['node_modules/three/LICENSE','vendor/three.LICENSE.txt'],

@@ -2,6 +2,8 @@
 
 ## Working direction
 
+Build 006 experiment: **Everyone drives** gives 2–4 weighted full-control seats to drivers and the saboteur, now with bots, standard-mapped gamepads and peppier arcade handling. Original **Split wheels** stays selectable. A fixed narrow shortcut rejoins the broad forest loop before the village gate. Next playtest: physical controllers, whether disagreement feels controllable, whether the .5 / .5 / .5 / .5 weighting is fun, and whether players discuss the fork. Dynamic route advantages are not implemented yet. The earlier optional boost/handbrake role below is an older proposal, not the new mode.
+
 A local 3–4 player party game: two players control left/right wheel power, an optional third driver controls boost and handbrake, and a known saboteur triggers trouble. Rotate roles between short rounds.
 
 Platform: a browser-based, low-poly 3D game with a shared third-person chase camera. Begin with keyboard controls and add gamepads before the group playtest. Online multiplayer is outside the first demo.
