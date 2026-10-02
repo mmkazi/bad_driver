@@ -16,6 +16,7 @@ const files=[
   ...['main.js','world.js','physics.js','rules.js','course.js','traffic.js','scenery.js','crew.js','bots.js','gamepads.js','style.css'].map(name=>[`src/${name}`,`src/${name}`]),
   ['node_modules/three/build/three.module.js','vendor/three.module.js'],
   ['node_modules/three/build/three.core.js','vendor/three.core.js'],
+  ['node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','vendor/RoundedBoxGeometry.js'],
   ['node_modules/three/LICENSE','vendor/three.LICENSE.txt'],
   ['node_modules/cannon-es/dist/cannon-es.js','vendor/cannon-es.js'],
   ['node_modules/cannon-es/LICENSE','vendor/cannon-es.LICENSE.txt'],
@@ -27,6 +28,7 @@ const html=(await readFile(resolve(root,'index.html'),'utf8'))
   // GitHub Pages serves this project under /bad_driver/, so use relative URLs
   // instead of paths that start at the web domain's root.
   .replace('/node_modules/three/build/three.module.js','./vendor/three.module.js')
+  .replace('/node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','./vendor/RoundedBoxGeometry.js')
   .replace('/node_modules/cannon-es/dist/cannon-es.js','./vendor/cannon-es.js')
   .replaceAll('"/src/','"./src/').replace('href="/"','href="./"');
 await writeFile(resolve(output,'index.html'),html);

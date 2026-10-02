@@ -1,8 +1,9 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'rounded-box';
 import { TRAFFIC_ROUTES, sampleRoute } from './traffic.js';
 import { MOUNTAINS, GARAGE_PARTS, garageColliders, treeCollider } from './scenery.js';
 import { GATES } from './physics.js';
-import { ROAD_SEGMENTS, ROAD_POINTS, BRANCH_POINTS, BRANCH_SEGMENTS, SHORTCUT_POSTS, ROAD_WIDTH, ROAD_THICKNESS, LAKE, BOUNDS, FINISH, BRIDGE_RAILS, inLake } from './course.js';
+import { ROAD_SEGMENTS, ROAD_POINTS, BRANCH_POINTS, BRANCH_SEGMENTS, SHORTCUT_POSTS, ROAD_WIDTH, ROAD_THICKNESS, LAKE, BOUNDS, FINISH, inLake } from './course.js';
 
 const colors = { grass: 0xb6c79a, road: 0x7c897d, cream: 0xf8efd8, orange: 0xe78350, dark: 0x33473f, mint: 0x7dd4ad };
 const materials = new Map();
@@ -13,6 +14,15 @@ function material(color) {
 function box(parent, w, h, d, color, x = 0, y = 0, z = 0) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material(color));
   mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh;
+}
+// Soften the car's edges while keeping its original overall size. This only
+// changes how it looks; its weight, wheel positions and handling stay the same.
+const roundedShapes = new Map();
+function roundedBox(parent,w,h,d,color,x=0,y=0,z=0,radius=.2){
+  const key=[w,h,d,radius].join(',');
+  if(!roundedShapes.has(key))roundedShapes.set(key,new RoundedBoxGeometry(w,h,d,3,radius));
+  const mesh=new THREE.Mesh(roundedShapes.get(key),material(color));
+  mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh;
 }
 function cylinder(parent, rt, rb, h, color, x, y, z, sides = 8) {
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, sides), material(color));
@@ -124,11 +134,6 @@ export function createWorld(canvas) {
     for(const z of [FINISH.minZ,FINISH.maxZ]){const stripe=box(scene,.18,.025,1.1,0xf1deb2,x,.045,z);stripe.rotation.y=-.6;}
   }
   for(const x of [FINISH.minX,FINISH.maxX])box(scene,.18,.025,10,0xf1deb2,x,.045,(FINISH.minZ+FINISH.maxZ)/2);
-  for(const rail of BRIDGE_RAILS){
-    const beam=box(scene,rail.width,rail.height,rail.depth,0x917b59,rail.x,rail.y,rail.z);cameraObstacles.push(beam);
-    box(scene,.3,1.6,.3,0xd3b484,rail.x-1.4,3.75,rail.z);
-    box(scene,rail.width,.13,.3,0xe8c797,rail.x,rail.y+.48,rail.z);
-  }
   function sign(x,y,z,yaw,text){
     const group=new THREE.Group();group.position.set(x,y,z);group.rotation.y=-yaw;scene.add(group);
     cylinder(group,.1,.1,3,0x7b8268,0,1.5,0,6);const board=label(group,text,5.5,'#fff5d9','#447e78');board.position.y=3.2;
@@ -202,12 +207,30 @@ export function createWorld(canvas) {
   });
 
   const random = seeded();
+  // Reuse one leaf shape across the forest. Overlapping, slightly uneven crowns
+  // make a leafy silhouette without needing thousands of individual leaves.
+  const leafShape = new THREE.IcosahedronGeometry(1, 1);
   function tree(x, z, size = 1) {
     const group = new THREE.Group(); scene.add(group); group.position.set(x, 0, z); group.scale.setScalar(size);
     cylinder(group, .2, .3, 2.5, 0x938566, 0, 1.25, 0, 5);
     obstacles.push(treeCollider(x,z,size));
-    cylinder(group, 0, 2.2, 4.5, [0x849d68,0x6c8e64,0x93a773][Math.floor(random()*3)], 0, 4, 0, 6);
-    cylinder(group, 0, 1.7, 3, 0x9ab37e, 0, 6, 0, 6);
+    // Keep the same single random draw as before, so prettier trees don't move
+    // the rest of the forest. Turn the crown, not the solid trunk underneath it.
+    const variation = random(), crown = new THREE.Group();group.add(crown);
+    crown.rotation.y = variation * Math.PI * 2;
+    for(const side of [-1,1]){
+      const branch=cylinder(crown,.1,.17,1.65,0x938566,side*.45,2.4,0,6);
+      branch.rotation.z=-side*.55;
+    }
+    const greens = [[0x789764,0x8ca975,0xa4bc83],[0x688f70,0x80a37c,0x9bb889],[0x859d63,0x9db277,0xb3c58a]][Math.floor(variation*3)];
+    for(const [px,py,pz,sx,sy,sz,tint] of [
+      [-1,3.45,0,1.65,1.8,1.55,0], [1,3.65,.25,1.6,1.7,1.6,1],
+      [0,4.05,-.85,1.75,1.85,1.5,0], [-.15,5.1,.1,1.7,1.75,1.65,2],
+    ]){
+      const leaves=new THREE.Mesh(leafShape,material(greens[tint]));
+      leaves.position.set(px,py,pz);leaves.scale.set(sx,sy,sz);
+      leaves.castShadow=true;leaves.receiveShadow=true;crown.add(leaves);
+    }
   }
   for (let i = 0; i < 290; i++) {
     const x = random() * 330 - 70, z = random() * 410 - 85;
@@ -261,21 +284,21 @@ export function createWorld(canvas) {
   const car = new THREE.Group(); scene.add(car);
   const model=new THREE.Group();model.position.y=-1.35;car.add(model);
   const body = new THREE.Group(); model.add(body);
-  box(body,2.85,.9,4.6,0xe87950,0,1.08,0);
-  box(body,2.7,.38,4.3,0xf3a96c,0,1.62,0);
-  box(body,2.38,1.22,2.3,0xf4d69c,0,2.02,.15);
+  roundedBox(body,2.85,.9,4.6,0xe87950,0,1.08,0,.32);
+  roundedBox(body,2.7,.38,4.3,0xf3a96c,0,1.62,0,.18);
+  roundedBox(body,2.38,1.22,2.3,0xf4d69c,0,2.02,.15,.28);
   box(body,2.02,.78,.08,0x557a77,0,2.14,-1.03);
   box(body,2.02,.72,.08,0x557a77,0,2.14,1.34);
   for(const x of [-1.2,1.2]){box(body,.06,.74,1.77,0x668f86,x,2.12,.14);box(body,.08,.85,.11,0xf4d69c,x,2.12,.15);}
-  box(body,2.57,.2,2.62,0xf7e0ab,0,2.69,.15);
-  box(body,2.95,.24,.25,0xe6dec3,0,.84,-2.4);box(body,2.95,.24,.25,0xe6dec3,0,.84,2.4);
+  roundedBox(body,2.5,.28,2.5,0xf7e0ab,0,2.63,.15,.14);
+  roundedBox(body,2.95,.24,.25,0xe6dec3,0,.84,-2.35);roundedBox(body,2.95,.24,.25,0xe6dec3,0,.84,2.35);
   box(body,1.1,.3,.08,0x4c5e50,0,1.1,-2.34);
   for(const x of [-.97,.97]){box(body,.5,.37,.1,0xffefb9,x,1.39,-2.34);box(body,.48,.28,.1,0xc7553e,x,1.39,2.34);}
   const wheels=[];
   for(const x of [-1.5,1.5])for(const z of [-1.48,1.48]){
     const wheel=new THREE.Group();wheel.position.set(x,.66,z);model.add(wheel);
-    const tire=cylinder(wheel,.65,.65,.47,0x34423c,0,0,0,12);tire.rotation.z=Math.PI/2;
-    const hub=cylinder(wheel,.31,.31,.49,0xeee2bf,0,0,0,8);hub.rotation.z=Math.PI/2;
+    const tire=cylinder(wheel,.65,.65,.47,0x34423c,0,0,0,20);tire.rotation.z=Math.PI/2;
+    const hub=cylinder(wheel,.31,.31,.49,0xeee2bf,0,0,0,16);hub.rotation.z=Math.PI/2;
     box(wheel,.51,.11,.47,0xacb49d);wheels.push(wheel);
   }
   // Color-coded side badges echo the power gauges.
@@ -285,12 +308,16 @@ export function createWorld(canvas) {
   const follow = new THREE.Vector3(0,0,36);
   const trafficMeshes=Array.from({length:6},(_,id)=>{
     const group=new THREE.Group();scene.add(group);group.visible=false;
-    box(group,2.5,1.1,4.6,[0x7cbaa4,0xe1c776,0x7eabc1][id%3],0,.1);
-    box(group,2.15,1.1,2.4,0xe5dfc3,0,1.1,.2);box(group,1.9,.7,.08,0x507779,0,1.15,-1.03);
+    roundedBox(group,2.5,1.1,4.6,[0x7cbaa4,0xe1c776,0x7eabc1][id%3],0,.1,0,.32);
+    roundedBox(group,2.15,1.1,2.4,0xe5dfc3,0,1.1,.2,.26);
+    box(group,1.8,.65,.08,0x507779,0,1.15,-1.03);
+    box(group,1.8,.65,.08,0x507779,0,1.15,1.43);
+    for(const x of [-1.08,1.08])box(group,.06,.65,1.8,0x668f86,x,1.15,.2);
+    for(const z of [-2.3,2.3])roundedBox(group,2.55,.22,.25,0xe6dec3,0,-.18,z);
     const lights=[];
     for(const x of [-.9,.9]){box(group,.45,.28,.1,0xffedaf,x,.2,-2.34);lights.push(box(group,.45,.28,.1,0x965744,x,.2,2.34));}
     const tires=[];
-    for(const x of [-1.3,1.3])for(const z of [-1.45,1.45]){const tire=cylinder(group,.55,.55,.32,0x34423c,x,-.43,z,10);tire.rotation.z=Math.PI/2;tires.push(tire);}
+    for(const x of [-1.3,1.3])for(const z of [-1.45,1.45]){const tire=cylinder(group,.55,.55,.32,0x34423c,x,-.43,z,20);tire.rotation.z=Math.PI/2;tires.push(tire);}
     return {group,lights,tires};
   });
   const cameraTarget=new THREE.Vector3(),desiredCamera=new THREE.Vector3(),cameraDirection=new THREE.Vector3();

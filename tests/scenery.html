@@ -1,13 +1,15 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><title>Scenery visual checks</title>
-<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","cannon-es":"/node_modules/cannon-es/dist/cannon-es.js"}}</script>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","rounded-box":"/node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js","cannon-es":"/node_modules/cannon-es/dist/cannon-es.js"}}</script>
 <style>body{margin:0;background:#eef0df;font:16px system-ui}header{padding:12px;display:flex;gap:12px;align-items:center}button{padding:10px}#view{height:calc(100vh - 70px)}canvas{display:block;width:100%;height:100%}</style>
-<header><button id="finish">Downhill finish</button><button id="orchard">Orchard bend</button><button id="garage">Garage joints</button><label><input id="orbit" type="checkbox"> Orbit camera</label><span id="status">Loading…</span></header><div id="view"><canvas id="scene"></canvas></div>
+<header><button id="yard">Trees & car</button><button id="bridge">Open bridge</button><button id="finish">Downhill finish</button><button id="orchard">Orchard bend</button><button id="garage">Garage joints</button><label><input id="orbit" type="checkbox"> Orbit camera</label><span id="status">Loading…</span></header><div id="view"><canvas id="scene"></canvas></div>
 <script type="module">
 import {createWorld} from '../src/world.js';
 import {createCar,respawnCar} from '../src/physics.js';
 const world=createWorld(document.getElementById('scene')),car=createCar({obstacles:world.obstacles});let spawn;
 function select(next){spawn=next;respawnCar(car,spawn);world.snapCamera();}
+document.getElementById('yard').onclick=()=>select({x:23,y:0,z:9,yaw:0});
+document.getElementById('bridge').onclick=()=>select({x:95,y:3,z:32,yaw:Math.PI/2});
 document.getElementById('finish').onclick=()=>select({x:150,y:5,z:280,yaw:-Math.PI/2});
 document.getElementById('orchard').onclick=()=>select({x:220,y:5,z:250,yaw:Math.PI});
 document.getElementById('garage').onclick=()=>select({x:165,y:0,z:215,yaw:Math.PI*3/4});

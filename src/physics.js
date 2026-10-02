@@ -1,5 +1,5 @@
 import * as CANNON from 'cannon-es';
-import { ROAD_SEGMENTS, BRANCH_SEGMENTS, SHORTCUT_POSTS, ROAD_THICKNESS, CLIFF_START, GATES, LAKE, BOUNDS, BRIDGE_RAILS, inLake } from './course.js';
+import { ROAD_SEGMENTS, BRANCH_SEGMENTS, SHORTCUT_POSTS, ROAD_THICKNESS, CLIFF_START, GATES, LAKE, BOUNDS, inLake } from './course.js';
 import { createTraffic, tickTraffic } from './traffic.js';
 
 export { CLIFF_START, GATES };
@@ -48,7 +48,6 @@ export function createCar({course=true,obstacles=[],traffic=false}={}){
     staticBox(world,new CANNON.Vec3(s.width/2,ROAD_THICKNESS/2,s.length/2+.12),
       new CANNON.Vec3(s.x-n.x*ROAD_THICKNESS/2,s.y-n.y*ROAD_THICKNESS/2,s.z-n.z*ROAD_THICKNESS/2),q);
   }
-  if(course)for(const rail of BRIDGE_RAILS)staticBox(world,new CANNON.Vec3(rail.width/2,rail.height/2,rail.depth/2),new CANNON.Vec3(rail.x,rail.y,rail.z));
   for(const o of [...obstacles,...(course?SHORTCUT_POSTS:[])]){
     if(o.kind==='cone')continue;
     const height=o.height??(o.kind==='building'?6:1.5);

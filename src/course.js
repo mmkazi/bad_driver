@@ -99,11 +99,6 @@ export const BRANCH_SEGMENTS=BRANCH_POINTS.slice(0,-1).map((a,index)=>{
   const b=BRANCH_POINTS[index+1],dx=b.x-a.x,dz=b.z-a.z;
   return {x:(a.x+b.x)/2,y:.06,z:(a.z+b.z)/2,width:7,section:'shortcut',length:Math.hypot(dx,dz),yaw:Math.atan2(dx,dz),pitch:0,index};
 });
-// Rails share their dimensions between rendering and collision. Their low height
-// catches gentle mistakes, while a hard enough hit can still put a car overboard.
-export const BRIDGE_RAILS=[-1,1].flatMap(side=>Array.from({length:18},(_,i)=>({
-  x:87.5+i*3,y:3.45,z:32+side*3.65,width:3,height:.9,depth:.24,
-})));
 export const GATES=Object.freeze([
   {x:0,y:0,z:8,yaw:0,label:'TEAMWORK',title:'Find your rhythm',text:'Match your power, then head for the hill.',spawn:{x:0,y:0,z:5,yaw:0}},
   {x:0,y:8,z:-36,yaw:0,label:'THE HIGH ROAD',title:'The high road',text:'Climb the ramp. Ease off as you reach the crest.',spawn:CLIFF_START},
