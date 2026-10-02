@@ -3,6 +3,8 @@ import * as CANNON from 'cannon-es';
 // The first/last points sit inside garages, off the race course. Cubic ramps
 // merge tangentially into two opposite lanes on the village straight.
 function path(curves){
+  // Turn a few hand-drawn curves into evenly spaced positions for a traffic car.
+  // Distance along the path is saved so cars can move smoothly between them.
   const points=[];
   for(const [a,b,c,d] of curves)for(let i=0;i<40;i++){
     const t=i/40,u=1-t;points.push({x:u*u*u*a[0]+3*u*u*t*b[0]+3*u*t*t*c[0]+t*t*t*d[0],z:u*u*u*a[1]+3*u*u*t*b[1]+3*u*t*t*c[1]+t*t*t*d[1]});
@@ -16,6 +18,8 @@ export const TRAFFIC_ROUTES=[
   path([[[208,130],[208,152],[182,172],[146,172]],[[146,172],[116,172],[78,172],[46,172]],[[46,172],[8,172],[-8,154],[-8,126]]]),
 ];
 export function sampleRoute(route,distance){
+  // Find the two route points around this distance and blend between them.
+  // This gives traffic a position and facing direction anywhere along its path.
   const s=Math.max(0,Math.min(route.length,distance));
   let lo=0,hi=route.points.length-1;
   while(lo+1<hi){const mid=(lo+hi)>>1;if(route.points[mid].s<s)lo=mid;else hi=mid;}
@@ -23,6 +27,8 @@ export function sampleRoute(route,distance){
   return {x:a.x+dx*t,z:a.z+dz*t,fx:dx/n,fz:dz/n,yaw:Math.atan2(dx,-dz)};
 }
 export function createTraffic(world){
+  // Make a small reusable pool. Cars wait off-road until there is room to join,
+  // then return to the pool after reaching the far depot.
   const vehicles=Array.from({length:6},(_,id)=>{
     const body=new CANNON.Body({mass:900,fixedRotation:true,collisionFilterGroup:4,collisionFilterMask:2|4,linearDamping:.02});
     body.addShape(new CANNON.Box(new CANNON.Vec3(1.25,.65,2.3)));body.updateMassProperties();
@@ -35,6 +41,8 @@ export function resetTraffic(traffic){
   traffic.timers=[0,3];traffic.spawned=traffic.departed=0;
 }
 export function tickTraffic(traffic,player,dt){
+  // Spawn at a depot only when the player and road entrance are clear.
+  // Otherwise keep trying shortly afterward instead of appearing on the car.
   const distance=(p,q)=>Math.hypot(p.x-q.x,p.z-q.z);
   for(let route=0;route<2;route++){
     traffic.timers[route]-=dt;

@@ -21,7 +21,7 @@ Presets: four seats = .5 / .5 / .5 / .5; three = .8 / .8 / .6; two = 1.4 / .7. I
 
 ## Peppier handling and controllers
 
-Everyone drives currently uses a 0.10-second throttle response, a 0.07-second steering response, arcade motor force 21 and lower drag. Its turning multiplier is 1.5, with a low-speed steering-rate cap of 1.375 rad/s. These values were tuned for quick shared-keyboard play; Split wheels keeps its original physics tuning. Driver bots target up to 23 m/s on clear road and slow for corners and hazards.
+Everyone drives currently uses a 0.10-second throttle response, a 0.07-second steering response, arcade motor force 21 and lower drag. Its turning multiplier is 1.5, with a low-speed steering-rate cap of 1.375 rad/s. These values were tuned for quick shared-keyboard play; Split wheels keeps its original physics tuning. Driver bots target up to 11.5 m/s on clear road and slow for corners and hazards, leaving players room to go faster.
 
 Connect a standard-mapped gamepad and press a button while the page is focused. In Everyone drives, choose **Controller N** in a seat's dropdown. Left stick or D-pad steers; RT/R2 accelerates; LT/L2 brakes then reverses. Analog triggers and a 15% stick dead zone are supported. Each controller occupies one seat; keyboards, controllers and bots can mix. Controller assignments lock during rounds, disconnects pause the game, and controls must be released after assignment, recovery or resume before driving. Solo rehearsal is still WASD-only. Unmapped devices are detected but not offered until custom mapping support is added. Browser discovery follows the [Gamepad API](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API/Using_the_Gamepad_API).
 

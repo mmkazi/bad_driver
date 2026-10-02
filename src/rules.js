@@ -3,7 +3,12 @@ export const ABILITIES = Object.freeze({
   right:{name:'Right surge',cost:35,warning:1.2,duration:1.8,cooldown:6,family:'surge'},
   slip:{name:'Slippery tires',cost:55,warning:1.4,duration:3,cooldown:10,family:'slip'},
 });
+
+// All saboteur state lives here so warnings, active effects and cooldowns have
+// one source of truth. Energy regenerates during normal play.
 export function createSabotage(){return {energy:70,protection:3,pending:null,active:null,cooldowns:{surge:0,slip:0},uses:0};}
+
+// Explain why an attack is not available before allowing it to start.
 export function blockReason(s,id){
   const a=ABILITIES[id];
   if(!a)return 'Unknown ability';
@@ -14,11 +19,15 @@ export function blockReason(s,id){
   return '';
 }
 export function requestSabotage(s,id){
+  // Pay up front, start the warning and cooldown, then let tickSabotage switch
+  // the warning into its effect after the countdown.
   if(blockReason(s,id))return false;
   const a=ABILITIES[id];s.energy-=a.cost;s.pending={id,remaining:a.warning};s.cooldowns[a.family]=a.cooldown;s.uses++;return true;
 }
 export function protectCar(s){s.pending=null;s.active=null;s.protection=4;}
 export function tickSabotage(s,dt){
+  // Advance every timer with game time. Pausing stops calls to this function,
+  // so warnings and effects wait while the players take a break.
   s.energy=Math.min(100,s.energy+8*dt);s.protection=Math.max(0,s.protection-dt);
   for(const key of Object.keys(s.cooldowns))s.cooldowns[key]=Math.max(0,s.cooldowns[key]-dt);
   if(s.pending){s.pending.remaining-=dt;if(s.pending.remaining<=0){const id=s.pending.id;s.pending=null;s.active={id,remaining:ABILITIES[id].duration};}}
@@ -27,6 +36,8 @@ export function tickSabotage(s,dt){
 export function sabotageEffects(s){return {surgeSide:s.active?.id==='left'?'left':s.active?.id==='right'?'right':null,gripFactor:s.active?.id==='slip'?.12:1};}
 export function createRound(duration=180){return {running:true,duration,elapsed:0,crashes:0,recoveries:0,crashCooldown:0,gates:new Set(),outcome:null};}
 export function tickRound(round,dt,{impact=0,recovered=false,gate=null}={}){
+  // Track results once per physics step: gates count once, impacts use a short
+  // cooldown, and the round ends when its timer runs out.
   if(!round?.running)return;
   round.elapsed=Math.min(round.duration,round.elapsed+dt);round.crashCooldown=Math.max(0,round.crashCooldown-dt);
   if(impact>6&&round.crashCooldown===0){round.crashes++;round.crashCooldown=1.5;}

@@ -4,12 +4,15 @@ import {resolve,dirname} from 'node:path';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const output=resolve(root,'dist');
-// Only clean the fixed generated directory, never a caller-provided path or symlink.
+// `dist` is the disposable website package, not the source folder. Refuse a
+// symlink before replacing it so a mistaken path cannot erase another folder.
 const existing=await lstat(output).catch(error=>{if(error.code!=='ENOENT')throw error;});
 if(existing?.isSymbolicLink())throw new Error('Refusing to build into a symlinked dist directory.');
 await rm(output,{recursive:true,force:true});
 await mkdir(output,{recursive:true});
 const files=[
+  // Copy only what the browser needs. Tests, Git files and the local server
+  // stay out of the published package.
   ...['main.js','world.js','physics.js','rules.js','course.js','traffic.js','scenery.js','crew.js','bots.js','gamepads.js','style.css'].map(name=>[`src/${name}`,`src/${name}`]),
   ['node_modules/three/build/three.module.js','vendor/three.module.js'],
   ['node_modules/three/build/three.core.js','vendor/three.core.js'],
@@ -21,6 +24,8 @@ for(const [source,destination] of files){
   const target=resolve(output,destination);await mkdir(dirname(target),{recursive:true});await copyFile(resolve(root,source),target);
 }
 const html=(await readFile(resolve(root,'index.html'),'utf8'))
+  // GitHub Pages serves this project under /bad_driver/, so use relative URLs
+  // instead of paths that start at the web domain's root.
   .replace('/node_modules/three/build/three.module.js','./vendor/three.module.js')
   .replace('/node_modules/cannon-es/dist/cannon-es.js','./vendor/cannon-es.js')
   .replaceAll('"/src/','"./src/').replace('href="/"','href="./"');

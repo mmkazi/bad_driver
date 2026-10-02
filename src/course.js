@@ -1,4 +1,5 @@
-// Shared by the road meshes and physics colliders.
+// Shared by the drawn road and the invisible solid road beneath it. Keeping
+// both shapes from these same points helps them stay lined up.
 export const ROAD_WIDTH = 14;
 export const ROAD_THICKNESS = 0.6;
 export const CLIFF_START = Object.freeze({ x: 0, y: 8, z: -39, yaw: 0 });
@@ -10,6 +11,8 @@ export const TRAFFIC_START = Object.freeze({x:16,y:0,z:176,yaw:Math.PI/2});
 export function inLake(x,z){return x>LAKE.minX&&x<LAKE.maxX&&z>LAKE.minZ&&z<LAKE.maxZ;}
 const points = [];
 function line(a, b, width=14, endWidth=width, section='road') {
+  // Break long straight or sloping pieces into short even sections. The physics
+  // and 3D renderer use those sections to build smooth-looking road surfaces.
   const count = Math.ceil(Math.hypot(b.x-a.x, b.y-a.y, b.z-a.z) / 2.5);
   for (let i=0; i<count; i++) {
     const t=i/count;
@@ -17,6 +20,7 @@ function line(a, b, width=14, endWidth=width, section='road') {
   }
 }
 function arc(cx, cz, radius, from, to, y, width=14) {
+  // Lay points along a circular bend. Smaller spacing makes tighter bends smooth.
   const count=Math.ceil(Math.abs(to-from)*radius/2);
   for(let i=0;i<count;i++){
     const angle=from+(to-from)*i/count;
@@ -41,7 +45,8 @@ line({x:158,y:0,z:32},{x:170,y:0,z:32},12);
 arc(170,52,20,-Math.PI/2,0,0,12);
 line({x:190,y:0,z:52},{x:190,y:0,z:80},12);
 arc(166,80,24,0,Math.PI/2,0,12);
-// Two gentle Bezier bends and one low rise on the woodland return.
+// Two gentle Bezier bends and one low rise on the woodland return. The curve
+// points let the road change direction without an abrupt corner.
 function bend(a,b,c,d){
   for(let i=0;i<26;i++){
     const t=i/26,u=1-t,x=u*u*u*a[0]+3*u*u*t*b[0]+3*u*t*t*c[0]+t*t*t*d[0];
@@ -73,8 +78,9 @@ export const ROAD_SEGMENTS=points.slice(0,-1).map((a,index)=>{
 });
 export const COURSE_LENGTH=ROAD_SEGMENTS.reduce((sum,s)=>sum+s.length,0);
 export const FORK_START={x:78,y:0,z:104,yaw:-Math.PI/2};
-// Narrow forest shortcut; the existing broad western loop stays intact.
-// Both choices rejoin before SHARE THE ROAD, so gate order is identical.
+// A second, narrower road branches left through the forest. The main road still
+// makes the wide loop. Both paths meet again before SHARE THE ROAD, so the same
+// checkpoints count on either route.
 export const BRANCH_POINTS=[];
 for(const [a,b,c,d] of [
   [[48,104],[20,104],[20,126],[20,140]],
@@ -84,6 +90,7 @@ for(const [a,b,c,d] of [
 }
 BRANCH_POINTS.push({x:16,y:.045,z:176,width:7,section:'shortcut'});
 export const SHORTCUT_POSTS=BRANCH_POINTS.flatMap((p,i)=>{
+  // Add solid posts along the sides of the narrow part to make the shortcut risky.
   if(i<16||i>62||i%4)return [];
   const next=BRANCH_POINTS[i+1],dx=next.x-p.x,dz=next.z-p.z,length=Math.hypot(dx,dz);
   return [-1,1].map(side=>({x:p.x-dz/length*side*4,z:p.z+dx/length*side*4,radius:.4,height:1.2,kind:'post'}));

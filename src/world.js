@@ -73,7 +73,8 @@ export function createWorld(canvas) {
 
   const cameraObstacles=[];
   const obstacles = [], cones = [], gates = [];
-  // A continuous ribbon avoids coplanar overlap seams on the curved deck.
+  // Turn route center points into one connected surface. That avoids cracks
+  // where separate road tiles would meet. This helper draws either route.
   function roadRibbon(offset,width,color,lift,route=ROAD_POINTS){
     const vertices=[],indices=[];
     route.forEach((point,i)=>{
@@ -92,9 +93,13 @@ export function createWorld(canvas) {
   }
   cameraObstacles.push(roadRibbon(0,p=>p.width,0x79867e,0));
   roadRibbon(p=>-p.width/2+.3,.35,0xe9c897,.025);roadRibbon(p=>p.width/2-.3,.35,0xe9c897,.025);
+  // Draw the shortcut from the same route points used for its solid surface
+  // and the bot's navigation, so players can see exactly where it goes.
   cameraObstacles.push(roadRibbon(0,p=>p.width,0xa39474,0,BRANCH_POINTS));
   roadRibbon(-3.2,.2,0xf2d49a,.025,BRANCH_POINTS);roadRibbon(3.2,.2,0xf2d49a,.025,BRANCH_POINTS);
   const hiddenTop=new THREE.MeshStandardMaterial({visible:false});
+  // Invisible boxes sit under the visible ribbons. These boxes, not the paint,
+  // support the car and are included in the camera's wall checks.
   for(const segment of [...ROAD_SEGMENTS,...BRANCH_SEGMENTS]){
     const roadGroup=new THREE.Group();scene.add(roadGroup);
     roadGroup.position.set(segment.x,segment.y,segment.z);

@@ -36,12 +36,19 @@ test('each active seat has independent steering, gas and brake with unused seats
   assert.equal(crewInputs(new Set(['KeyW','KeyS','KeyA','KeyD']),[1]).steer,0);
 });
 test('arcade full-throttle turning stays upright and returns to straight driving',()=>{
+  // Match the quicker steering setup used by Everyone drives. The steering
+  // input, speed scaling, 1.375 rate cap and 1.5 multiplier set the limit.
+  const livelyTune={...tune,turning:1.5};
   const car=createCar({course:false});respawnCar(car,{x:-50,y:0,z:160,yaw:0});
   for(let i=0;i<120*12;i++){
-    stepCar(car,{arcade:true,left:softLimit(2),right:softLimit(2),steer:softLimit(2)},tune,1/120);
-    assert.ok(car.upY>.9,`up ${car.upY}`);assert.ok(Math.abs(car.yawRate)<1.6);
+    stepCar(car,{arcade:true,left:softLimit(2),right:softLimit(2),steer:softLimit(2)},livelyTune,1/120);
+    assert.ok(car.upY>.9,`up ${car.upY}`);
+    // A hard body hit deliberately releases steering help for 0.8 seconds, so
+    // its spin can carry on after contact ends. Check the rate cap while normal
+    // driving help is active, and check upright stability on every step.
+    if(car.impact<=2&&car.arcadeDisruption===0)assert.ok(Math.abs(car.yawRate)<2.5,`yaw ${car.yawRate}, speed ${car.speed}`);
   }
-  for(let i=0;i<120;i++)stepCar(car,{arcade:true,left:1,right:1,steer:0},tune,1/120);
+  for(let i=0;i<120;i++)stepCar(car,{arcade:true,left:1,right:1,steer:0},livelyTune,1/120);
   assert.ok(Math.abs(car.yawRate)<.05);assert.equal(car.recoveries,0);
 });
 test('arcade input does not erase airborne angular momentum',()=>{

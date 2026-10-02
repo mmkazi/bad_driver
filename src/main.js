@@ -7,6 +7,8 @@ import { resetTraffic } from './traffic.js';
 import { ABILITIES, createSabotage, requestSabotage, blockReason, protectCar, tickSabotage, sabotageEffects, createRound, tickRound, endRound, clockText } from './rules.js';
 
 const $ = id => document.getElementById(id);
+// Set up the visible 3D world first. If the browser cannot create it, show a
+// readable message rather than leaving an empty game area.
 let world;
 try {
   const { createWorld } = await import('./world.js');
@@ -16,6 +18,8 @@ try {
   $('errorMessage').textContent = `The 3D renderer could not start. Use a WebGL-enabled browser and run the local server after installing dependencies. (${error.message})`;
   throw error;
 }
+// Keep the car, course progress and practice state together here. Physics owns
+// movement; this file decides which controls reach it and when a run advances.
 let car=createCar({obstacles:world.obstacles,traffic:true}), mode='shared', paused=false, gateIndex=0, finalGateCrossed=false, stoppedTime=0, complete=false;
 const keys=new Set(), tune={...DEFAULTS};
 let scheme='split',weights=[...PRESETS[4]];
@@ -23,12 +27,19 @@ const arcadeTune={response:.1,turning:1.5,grip:1};
 const sources=['human','human','human','human'];
 let pads=[],padSignature='';
 const armedPads=new Set();
+
+// A selected controller contributes nothing until the player lets its stick
+// and triggers return to rest. That prevents an already-held trigger from
+// suddenly accelerating when the player assigns it or resumes the game.
 function controllerInput(source){
   const index=Number(source.slice(4)),pad=pads.find(p=>p.index===index);
   const result=gatedGamepadInput(pad,armedPads.has(index));
   if(result.armed)armedPads.add(index);else armedPads.delete(index);
   return result.input;
 }
+
+// Check controller connections once per screen update. Rebuild the seat menus
+// when devices appear or disappear, and pause if a seat loses its controller.
 function pollControllers(){
   pads=readGamepads();
   const signature=JSON.stringify(pads.map(p=>[p.index,p.id,p.mapping]));
@@ -39,8 +50,16 @@ function pollControllers(){
   $('controllerHint').textContent=pads.some(p=>p.mapping!=='standard')?'An unmapped controller was detected. This demo supports standard-mapped gamepads only.':pads.length?'Left stick / D-pad steer · RT/R2 gas · LT/L2 brake/reverse. Release controls after assigning or resuming.':'Connect a controller, then press a button to reveal it here. Left stick steers; RT/R2 gas, LT/L2 brake/reverse.';
 }
 let bots=sources.map(()=>createBot());
+
+// Give each bot its own remembered fork guess and sabotage timing.
 function resetBots(){bots=sources.map(()=>createBot());}
+
+// All respawns also clear controller arming and bot thoughts, so an old input
+// or half-finished plan cannot carry through a fall or a reset.
 function respawnCar(...args){resetBots();armedPads.clear();return respawnPhysicsCar(...args);}
+
+// Gather one signed drive/steer pair from every active seat, then add them
+// using that seat's weight. The original split-wheel mode bypasses this mixer.
 function currentInput(dt=0){
   if(botRecovery!==car.recoveries){resetBots();armedPads.clear();botRecovery=car.recoveries;}
   if(scheme==='split')return inputsFor(keys,mode);
@@ -49,6 +68,9 @@ function currentInput(dt=0){
   return mixCrew(players,weights);
 }
 let botRecovery=car.recoveries;
+
+// Rebuild the setup controls from the selected number of seats. Each seat can
+// use keys, a bot, or one connected standard-layout gamepad.
 function renderSeats(){
   $('crewSeats').replaceChildren();
   weights.forEach((weight,i)=>{
@@ -73,6 +95,8 @@ function renderSeats(){
   $('crewBadge').textContent=scheme==='crew'?`${weights.length-1} DRIVERS + 1 DRIVING SABOTEUR`:'2 DRIVERS + 1 MENACE';
 }
 function setScheme(next){
+  // Switching modes clears held controls to avoid carrying throttle or steering
+  // from one layout into a different one.
   scheme=next;keys.clear();armedPads.clear();resetBots();sabotage=createSabotage();car.left=car.right=car.steer=0;
   $('crewPanel').hidden=scheme!=='crew';
   $('game').setAttribute('aria-label',scheme==='crew'?'3D driving course. Full controls per seat: WASD, arrow keys, IJKL, TFGH. Last active seat sabotages. R resets.':'3D driving course. Split wheels: W/S left, up/down right. J/K/L sabotage. R resets.');
@@ -97,6 +121,8 @@ function updateLesson(){
   $('lessonText').textContent=complete?'Nine gates, one friendship. Reset for another road trip.':gate.text;
   $('lessonCheck').textContent=complete?'✓':'↗';
 }
+// A full reset returns the car, moving traffic, checkpoints, timers and scenery
+// to their opening state, while keeping the player's chosen seats and weights.
 function reset(){round=null;sabotage=createSabotage();resetTraffic(car.traffic);car.checkpoint={...SPAWN};respawnCar(car,SPAWN);keys.clear();gateIndex=0;finalGateCrossed=false;stoppedTime=0;complete=false;world.reset();updateLesson();toast('Fresh start. Same questionable crew.');updateHUD({left:0,right:0});}
 function cliffStart(){car.checkpoint={...CLIFF_START};respawnCar(car,CLIFF_START);keys.clear();gateIndex=2;finalGateCrossed=false;stoppedTime=0;complete=false;world.snapCamera();updateLesson();setPaused(false);toast('Eight metres up. Turn right, or investigate gravity.');}
 function bridgeStart(){car.checkpoint={...BRIDGE_START};respawnCar(car,BRIDGE_START);keys.clear();gateIndex=3;finalGateCrossed=false;stoppedTime=0;complete=false;world.snapCamera();updateLesson();setPaused(false);toast('A little less road. A lot more water.');}
@@ -134,6 +160,8 @@ function attack(id){
 }
 $('surgeLeft').onclick=()=>attack('left');$('surgeRight').onclick=()=>attack('right');$('slippery').onclick=()=>attack('slip');
 function updateSessionUI(){
+  // During a timed round, prevent setup changes that could alter the rules in
+  // the middle of play. Refresh buttons and status text from the current state.
   const locked=!!round?.running;
   for(const id of ['cliffButton','bridgeButton','trafficButton','resetButton','sharedMode','soloMode','response','turning','grip','cameraDistance','defaultsButton','newRound'])$(id).disabled=locked;
   for(const id of ['splitScheme','crewScheme','playerCount','weightDefaults','crewRehearsal','forkButton'])$(id).disabled=locked;
@@ -179,6 +207,8 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){keys.clear
 $('game').addEventListener('pointerdown',()=>{$('game').focus();if(paused)setPaused(false);});
 $('game').addEventListener('webglcontextlost',event=>{event.preventDefault();setPaused(true);$('pauseReason').textContent='The graphics context was lost. Reload the page to restart the renderer.';});
 function updateHUD(input){
+  // Display the state produced by the last physics step, plus the input we just
+  // sent in. The seat rows are useful for spotting conflicting controls.
   $('speed').textContent=Math.round(car.speed*3.6);
   $('motionState').textContent=car.waterTime>0?'NOT A BOAT':car.overturnedTime>0?`RECOVERING IN ${Math.max(0,1.8-car.overturnedTime).toFixed(1)} s`:car.airTime>.12?'AIRBORNE':car.speed<.5?'READY TO ROLL':car.forwardSpeed<-.5?'BACKING IT UP':Math.abs(car.yawRate)>.65?'TALK TO EACH OTHER':'LOOKING GOOD';
   $('altitude').textContent=`${Math.max(0,car.y).toFixed(1)} m`;
@@ -203,6 +233,8 @@ function updateHUD(input){
 }
 const map=$('routeMap').getContext('2d');
 function drawMap(){
+  // Draw the main course, shortcut, checkpoints, traffic and car as a tiny
+  // overhead guide. Coordinates are squeezed into the canvas rectangle.
   const sx=x=>(x+40)/280*120+5,sz=z=>(z+75)/370*93+5;
   map.clearRect(0,0,130,103);map.fillStyle='#87bfbd';map.fillRect(sx(LAKE.minX),sz(LAKE.minZ),sx(LAKE.maxX)-sx(LAKE.minX),sz(LAKE.maxZ)-sz(LAKE.minZ));
   map.strokeStyle='#81927e';map.lineWidth=2.4;map.beginPath();ROAD_POINTS.forEach((p,i)=>i?map.lineTo(sx(p.x),sz(p.z)):map.moveTo(sx(p.x),sz(p.z)));map.stroke();
@@ -213,12 +245,16 @@ function drawMap(){
 }
 $('routeLength').textContent=`${Math.round(COURSE_LENGTH)} m MAIN ROUTE · ${GATES.length} GATES · 1 FORK`;
 function tick(now){
+  // Browser frames do not arrive at perfectly even intervals. Run the game in
+  // small fixed steps so physics and controller reads behave consistently.
   pollControllers();
   const dt=Math.min((now-lastTime)/1000,.05);lastTime=now;
   if(!paused&&!help.open&&!results.open){
     elapsed+=dt;accumulator+=dt;collisionCooldown=Math.max(0,collisionCooldown-dt);
     let input=currentInput();
     while(accumulator>=FIXED){
+      // Re-read each bot/controller for every physics step. This keeps gamepad
+      // triggers responsive even when the display runs at a different frame rate.
       input=currentInput(FIXED);
       if(scheme==='split')tickSabotage(sabotage,FIXED);
       const previous={x:car.x,y:car.y,z:car.z};
@@ -227,6 +263,8 @@ function tick(now){
       if(car.respawned){protectCar(sabotage);keys.clear();input.left=input.right=input.steer=0;finalGateCrossed=false;stoppedTime=0;world.snapCamera();toast(car.recoveryReason==='water'?'Not a boat. Back to the last dry checkpoint.':'Wheels belong underneath. Back to your last safe spot.');}
       else if(impact>5&&collisionCooldown===0){toast('A very hands-on physics experiment.');collisionCooldown=2;}
       if(!car.respawned&&gateIndex<GATES.length&&crossedGate(previous,car,GATES[gateIndex])){
+        // A gate only counts when the car crosses it in the right direction.
+        // Save each reached gate as a respawn point and give credit once.
         passedGate=gateIndex;
         if(gateIndex<GATES.length-1){
           car.checkpoint={...GATES[gateIndex].spawn};
