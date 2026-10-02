@@ -1,4 +1,6 @@
 import {ROAD_POINTS,BRANCH_POINTS,FINISH} from './course.js';
+import {IS_PINEWATER,ALL_ROUTES,GATES} from './course.js';
+import {FORKS,DEAD_END} from './pinewater.js';
 const clamp=(v,a=-1,b=1)=>Math.max(a,Math.min(b,v));
 const angle=v=>Math.atan2(Math.sin(v),Math.cos(v));
 const neutral=()=>({drive:0,steer:0});
@@ -37,6 +39,27 @@ function lookAhead(points,near,distance){
   }
   return points.at(-1);
 }
+const reverseRoutes=new Map(ALL_ROUTES.map(route=>[route,[...route].reverse()]));
+function mountainRoute(bot,car,dt){
+  // Pick the road the car is actually on, including its height. Reverse the
+  // point order when heading back, so bots can help leave the dead end too.
+  const nearby=ALL_ROUTES.map(points=>({points,near:nearestRoad(points,car)})).sort((a,b)=>a.near.score-b.near.score);
+  let {points,near}=nearby[0];const surface=near;
+  const fork=FORKS.find(f=>Math.hypot(car.x-f.x,car.z-f.z)<24&&Math.abs(car.y-f.y)<4);
+  const choosing=!!fork&&Math.cos(car.yaw-nearestRoad(ROAD_POINTS,car).heading)>.25;
+  if(choosing){
+    if(bot.fork!==fork){bot.fork=fork;bot.forkChoice=null;bot.forkTime=0;}
+    if(bot.forkChoice===null)bot.forkChoice=bot.random()<.5?'main':'detour';
+    bot.forkTime+=dt;
+    if(bot.forkTime>=2){bot.forkTime%=2;bot.forkChoice=bot.random()<.5?'main':'detour';}
+    points=bot.forkChoice==='main'?ROAD_POINTS:fork.route;near=nearestRoad(points,car);
+  }else{bot.fork=null;bot.forkChoice=null;bot.forkTime=0;}
+  if(Math.cos(car.yaw-near.heading)<0){points=reverseRoutes.get(points);near=nearestRoad(points,car);}
+  // At the closed end, aim back along the road until the driver has turned.
+  // The turning circle is large enough to make this an ordinary steering input.
+  if(points===DEAD_END&&near.i>points.length-6){points=reverseRoutes.get(points);near=nearestRoad(points,car);}
+  return {points,near,surface,choosing};
+}
 // Bots only return ordinary player inputs. They never move the car directly,
 // checkpoints, traffic, weights, or the physics engine.
 export function tickBot(bot,car,{role='driver',gateIndex=0,traffic=[],complete=false}={},dt){
@@ -44,6 +67,9 @@ export function tickBot(bot,car,{role='driver',gateIndex=0,traffic=[],complete=f
   if(complete||car.upY<.5||car.airTime>.15){bot.output=neutral();return bot.output;}
   // The two routes share a checkpoint. Until the car is clearly on one path,
   // keep reconsidering the guess so a human can steer the group elsewhere.
+  let points,near,surface,choosing;
+  if(IS_PINEWATER)({points,near,surface,choosing}=mountainRoute(bot,car,dt));
+  else{
   const main=nearestRoad(ROAD_POINTS,car),branch=nearestRoad(BRANCH_POINTS,car);
   if(gateIndex===6){
     // Commit to where the human actually took the car, not the bot's guess.
@@ -51,7 +77,7 @@ export function tickBot(bot,car,{role='driver',gateIndex=0,traffic=[],complete=f
     if(!bot.route&&car.x<24&&main.distance+3<branch.distance)bot.route='main';
   }
   if(gateIndex>6||car.z>169&&car.x>16){bot.route=null;bot.forkChoice=null;bot.forkTime=0;}
-  const choosing=gateIndex===6&&!bot.route&&car.x>23&&car.x<66&&car.z>94&&car.z<119;
+  choosing=gateIndex===6&&!bot.route&&car.x>23&&car.x<66&&car.z>94&&car.z<119;
   if(choosing){
     if(bot.forkChoice===null){bot.forkChoice=bot.random()<.5?'main':'shortcut';bot.forkTime=0;}
     bot.forkTime+=dt;
@@ -60,7 +86,9 @@ export function tickBot(bot,car,{role='driver',gateIndex=0,traffic=[],complete=f
   // Follow the bot's current guess at the fork, but otherwise follow the road
   // the car is physically closest to. Its other guess is released for a beat.
   const useBranch=bot.route==='shortcut'||choosing&&bot.forkChoice==='shortcut';
-  const points=useBranch?BRANCH_POINTS:ROAD_POINTS,near=useBranch?branch:main;
+  points=useBranch?BRANCH_POINTS:ROAD_POINTS;near=useBranch?branch:main;
+  surface=main.score<=branch.score?main:branch;
+  }
   const target=lookAhead(points,near,clamp(3+car.speed*.6,4,10));
   const heading=Math.atan2(target.x-car.x,-(target.z-car.z)),error=angle(heading-car.yaw);
   const fx=Math.sin(car.yaw),fz=-Math.cos(car.yaw);
@@ -75,8 +103,7 @@ export function tickBot(bot,car,{role='driver',gateIndex=0,traffic=[],complete=f
   }
   // Judge danger from the road under the car, not the road the bot happened
   // to guess at the fork.
-  const surface=main.score<=branch.score?main:branch;
-  const drop=surface.y>2,edge=surface.distance>surface.width/2-2;
+  const drop=IS_PINEWATER?['cliff','bridge'].includes(surface.section):surface.y>2,edge=surface.distance>surface.width/2-2;
   const danger=drop||edge||vehicle!==null;
   // A safe stretch looks completely normal. Near danger, the saboteur picks
   // either helpful driving or an outward/traffic-directed steer for a random
@@ -114,10 +141,14 @@ export function tickBot(bot,car,{role='driver',gateIndex=0,traffic=[],complete=f
     drive=.85;
   }
   // Nominal bots brake into the finish box instead of overshooting it.
-  if(gateIndex>=8&&car.z>FINISH.minZ-5&&car.z<FINISH.maxZ+5&&car.x<100&&bot.mode==='nominal'){
+  if(!IS_PINEWATER&&gateIndex>=8&&car.z>FINISH.minZ-5&&car.z<FINISH.maxZ+5&&car.x<100&&bot.mode==='nominal'){
     const remaining=car.x-(FINISH.minX+FINISH.maxX)/2;
     const finishSpeed=clamp(remaining*.55,0,6);
     drive=car.speed<.3&&remaining<1?0:clamp((finishSpeed-car.forwardSpeed)*.45);
+  }
+  if(IS_PINEWATER&&gateIndex>=GATES.length-1&&bot.mode==='nominal'){
+    const remaining=Math.hypot(car.x-310,car.z+270);
+    if(remaining<25)drive=remaining<2&&car.speed<.3?0:clamp((clamp((remaining-1)*.5,0,6)-car.forwardSpeed)*.45);
   }
   bot.output={drive,steer};return bot.output;
 }

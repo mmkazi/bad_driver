@@ -1,10 +1,12 @@
 import * as CANNON from 'cannon-es';
 import { ROAD_SEGMENTS, BRANCH_SEGMENTS, SHORTCUT_POSTS, ROAD_THICKNESS, CLIFF_START, GATES, LAKE, BOUNDS, inLake } from './course.js';
 import { createTraffic, tickTraffic } from './traffic.js';
+import {MAP_SPAWN,MAP_SOLIDS,IS_PINEWATER,COLLISION_ROADS} from './course.js';
+import {ISLAND,TURNABOUT,TURNABOUT_GROVE,JUNCTIONS} from './pinewater.js';
 
 export { CLIFF_START, GATES };
 export const DEFAULTS = Object.freeze({ response: 0.45, turning: 1, grip: 0.75 });
-export const SPAWN = Object.freeze({ x: 0, y: 0, z: 36, yaw: 0 });
+export const SPAWN = Object.freeze({...MAP_SPAWN});
 export const clamp = (n, low, high) => Math.max(low, Math.min(high, n));
 const MASS=650, RIDE_HEIGHT=1.35, WHEEL_RADIUS=.65;
 const UP=new CANNON.Vec3(0,1,0), FORWARD=new CANNON.Vec3(0,0,-1);
@@ -21,6 +23,16 @@ export function inputsFor(keys,mode='shared'){
 function staticBox(world,halfExtents,position,quaternion){
   // Mass zero makes this part of the world: it can stop the car, but the car
   // cannot push it out of place.
+  if(IS_PINEWATER){
+    // Nearby immovable pieces can share one body. Without this grouping the
+    // larger course spends time comparing thousands of rocks that never move.
+    world.mapChunks??=new Map();
+    const key=`${Math.floor(position.x/48)},${Math.floor(position.z/48)}`;
+    let body=world.mapChunks.get(key);
+    if(!body){body=new CANNON.Body({mass:0,collisionFilterGroup:1});body.position.copy(position);world.addBody(body);world.mapChunks.set(key,body);}
+    body.addShape(new CANNON.Box(halfExtents),position.vsub(body.position),quaternion);body.aabbNeedsUpdate=true;
+    world.broadphase.dirty=true;return body;
+  }
   const body=new CANNON.Body({mass:0,collisionFilterGroup:1});
   body.addShape(new CANNON.Box(halfExtents));body.position.copy(position);
   if(quaternion)body.quaternion.copy(quaternion);
@@ -41,14 +53,19 @@ export function createCar({course=true,obstacles=[],traffic=false}={}){
     terrain(LAKE.minX,LAKE.maxX,LAKE.maxZ,BOUNDS.maxZ);
     terrain(LAKE.minX,LAKE.maxX,LAKE.minZ,LAKE.maxZ,LAKE.bottom);
   }else terrain(BOUNDS.minX,BOUNDS.maxX,BOUNDS.minZ,BOUNDS.maxZ);
-  if(course)for(const s of [...ROAD_SEGMENTS,...BRANCH_SEGMENTS]){
+  if(course)for(const s of COLLISION_ROADS){
     // Road pieces are solid boxes rotated to match the sloped/curved course.
     // The separate points come from course.js, shared with the visible road.
     const q=new CANNON.Quaternion();q.setFromEuler(s.pitch,s.yaw,0,'YXZ');const n=q.vmult(UP);
     staticBox(world,new CANNON.Vec3(s.width/2,ROAD_THICKNESS/2,s.length/2+.12),
       new CANNON.Vec3(s.x-n.x*ROAD_THICKNESS/2,s.y-n.y*ROAD_THICKNESS/2,s.z-n.z*ROAD_THICKNESS/2),q);
   }
-  for(const o of [...obstacles,...(course?SHORTCUT_POSTS:[])]){
+  if(course&&IS_PINEWATER)for(const p of [ISLAND,TURNABOUT,TURNABOUT_GROVE,...JUNCTIONS.map(j=>({...j,radius:j.radius+3}))]){
+    const ground=new CANNON.Body({mass:0,collisionFilterGroup:1});
+    const depth=p.depth??2;
+    ground.addShape(new CANNON.Cylinder(p.radius,p.radius,depth,32));ground.position.set(p.x,p.y-depth/2,p.z);world.addBody(ground);
+  }
+  for(const o of [...obstacles,...(course?[...SHORTCUT_POSTS,...MAP_SOLIDS]:[])]){
     if(o.kind==='cone')continue;
     const height=o.height??(o.kind==='building'?6:1.5);
     const q=new CANNON.Quaternion();q.setFromEuler(0,o.yaw||0,0);
@@ -65,7 +82,7 @@ export function createCar({course=true,obstacles=[],traffic=false}={}){
   const car={world,body,obstacles,course,waterTime:0,recoveryReason:'',checkpoint:{...SPAWN},left:0,right:0,distance:0,hit:0,impact:0,
     grounded:0,airTime:0,overturnedTime:0,respawned:false,recoveries:0,wheelHeights:[.65,.65,.65,.65]};
   body.addEventListener('collide',event=>{car.impact=Math.max(car.impact,Math.abs(event.contact.getImpactVelocityAlongNormal()));});
-  if(traffic)car.traffic=createTraffic(world);
+  if(traffic)car.traffic=IS_PINEWATER?{vehicles:[],timers:[Infinity,Infinity],spawned:0,departed:0,disabled:true}:createTraffic(world);
   respawnCar(car,SPAWN);car.respawned=false;return car;
 }
 function syncState(car){
@@ -169,7 +186,7 @@ export function stepCar(car,input,tune,dt,effects={}){
   }
   // Move local traffic and the player through the same physics world, then
   // check for water, falls and upside-down recovery after the step.
-  if(car.traffic)tickTraffic(car.traffic,{x:b.position.x,y:b.position.y,z:b.position.z},dt);
+  if(car.traffic&&!car.traffic.disabled)tickTraffic(car.traffic,{x:b.position.x,y:b.position.y,z:b.position.z},dt);
   car.world.step(dt);car.grounded=contacts;car.airTime=contacts===0?car.airTime+dt:0;
   if(arcadeTarget!==null&&car.impact<=2){
     // Bring the car back to the chosen turn rate after the physics step. Use a

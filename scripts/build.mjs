@@ -13,7 +13,7 @@ await mkdir(output,{recursive:true});
 const files=[
   // Copy only what the browser needs. Tests, Git files and the local server
   // stay out of the published package.
-  ...['main.js','world.js','physics.js','rules.js','course.js','traffic.js','scenery.js','crew.js','bots.js','gamepads.js','style.css'].map(name=>[`src/${name}`,`src/${name}`]),
+  ...['main.js','world.js','physics.js','rules.js','course.js','sunnyside.js','pinewater.js','pinewater-world.js','traffic.js','scenery.js','crew.js','bots.js','gamepads.js','style.css'].map(name=>[`src/${name}`,`src/${name}`]),
   ['node_modules/three/build/three.module.js','vendor/three.module.js'],
   ['node_modules/three/build/three.core.js','vendor/three.core.js'],
   ['node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','vendor/RoundedBoxGeometry.js'],

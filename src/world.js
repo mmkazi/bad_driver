@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'rounded-box';
+import {IS_PINEWATER,SIDE_ROUTES} from './course.js';
+import {addPinewater} from './pinewater-world.js';
+import {junctionAt} from './pinewater.js';
 import { TRAFFIC_ROUTES, sampleRoute } from './traffic.js';
 import { MOUNTAINS, GARAGE_PARTS, garageColliders, treeCollider } from './scenery.js';
 import { GATES } from './physics.js';
@@ -45,8 +48,8 @@ export function createWorld(canvas) {
   renderer.setClearColor(0xb9dce4); renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0xb9dce4);
-  scene.fog = new THREE.Fog(0xb9dce4, 110, 245);
-  const camera = new THREE.PerspectiveCamera(58, 1, .15, 320);
+  scene.fog = new THREE.Fog(0xb9dce4, IS_PINEWATER?550:110, IS_PINEWATER?1500:245);
+  const camera = new THREE.PerspectiveCamera(58, 1, .15, IS_PINEWATER?1900:320);
   const ambient = new THREE.HemisphereLight(0xfff3d4, 0x789270, 1.8); scene.add(ambient);
   const sun = new THREE.DirectionalLight(0xfff0ce, 2.6); sun.position.set(-35, 65, 20); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.left = -100; sun.shadow.camera.right = 100; sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100; sun.shadow.camera.far = 180; sun.shadow.normalBias = .05;
@@ -54,8 +57,9 @@ export function createWorld(canvas) {
   function terrain(x1,x2,z1,z2,top=-.07,color=colors.grass){
     const ground=box(scene,x2-x1,5,z2-z1,color,(x1+x2)/2,top-2.5,(z1+z2)/2);ground.castShadow=false;
   }
-  terrain(-240,LAKE.minX,-240,420);terrain(LAKE.maxX,380,-240,420);
-  terrain(LAKE.minX,LAKE.maxX,-240,LAKE.minZ);terrain(LAKE.minX,LAKE.maxX,LAKE.maxZ,420);
+  const groundBounds=IS_PINEWATER?{minX:-650,maxX:1100,minZ:-900,maxZ:650}:{minX:-240,maxX:380,minZ:-240,maxZ:420};
+  terrain(groundBounds.minX,LAKE.minX,groundBounds.minZ,groundBounds.maxZ);terrain(LAKE.maxX,groundBounds.maxX,groundBounds.minZ,groundBounds.maxZ);
+  terrain(LAKE.minX,LAKE.maxX,groundBounds.minZ,LAKE.minZ);terrain(LAKE.minX,LAKE.maxX,LAKE.maxZ,groundBounds.maxZ);
   terrain(LAKE.minX,LAKE.maxX,LAKE.minZ,LAKE.maxZ,LAKE.bottom,0xada57c);
   const water=new THREE.Mesh(new THREE.PlaneGeometry(LAKE.maxX-LAKE.minX,LAKE.maxZ-LAKE.minZ),new THREE.MeshStandardMaterial({color:0x56b5c5,roughness:.27,metalness:.12,transparent:true,opacity:.9}));
   water.rotation.x=-Math.PI/2;water.position.set((LAKE.minX+LAKE.maxX)/2,LAKE.surface,(LAKE.minZ+LAKE.maxZ)/2);scene.add(water);
@@ -79,14 +83,14 @@ export function createWorld(canvas) {
   ctx.fillStyle = '#eee7c9'; ctx.font = 'bold 1.4px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('S T A R T', 0, 42);
   ctx.restore();
   const texture = new THREE.CanvasTexture(surface); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const yard = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), new THREE.MeshStandardMaterial({ map: texture, roughness: 1 })); yard.rotation.x = -Math.PI / 2; yard.position.y = -.035; yard.receiveShadow = true; scene.add(yard);
+  const yard = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), new THREE.MeshStandardMaterial({ map: texture, roughness: 1 })); yard.rotation.x = -Math.PI / 2; yard.position.y = -.035; yard.receiveShadow = true;if(!IS_PINEWATER)scene.add(yard);
 
   const cameraObstacles=[];
   const obstacles = [], cones = [], gates = [];
   // Turn route center points into one connected surface. That avoids cracks
   // where separate road tiles would meet. This helper draws either route.
   function roadRibbon(offset,width,color,lift,route=ROAD_POINTS){
-    const vertices=[],indices=[];
+    const vertices=[],indices=[],groups=[];
     route.forEach((point,i)=>{
       const before=route[Math.max(0,i-1)],after=route[Math.min(route.length-1,i+1)];
       const dx=after.x-before.x,dz=after.z-before.z,length=Math.hypot(dx,dz);
@@ -95,22 +99,35 @@ export function createWorld(canvas) {
         const distance=(typeof offset==='function'?offset(point):offset)+side*(typeof width==='function'?width(point):width)/2;
         vertices.push(point.x+rx*distance,point.y+.015+lift,point.z+rz*distance);
       }
-      if(i<route.length-1){const a=i*2;indices.push(a,a+2,a+1,a+2,a+3,a+1);}
+      if(i<route.length-1){
+        // Cut both arms at the same shared junction. A single surface below
+        // fills the opening, so no stripe or overlapping road gives away a turn.
+        if(IS_PINEWATER&&lift>=0&&(junctionAt(point)||junctionAt(route[i+1])))return;
+        const a=i*2;groups.push([indices.length,6,point.section==='bridge'&&typeof width==='function'?1:0]);
+        indices.push(a,a+2,a+1,a+2,a+3,a+1);
+      }
     });
     const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geometry.setIndex(indices);geometry.computeVertexNormals();
-    route.slice(0,-1).forEach((p,i)=>geometry.addGroup(i*6,6,p.section==='bridge'&&typeof width==='function'?1:0));
-    const mesh=new THREE.Mesh(geometry,[material(color),material(0xb49a72)]);mesh.receiveShadow=true;mesh.castShadow=true;scene.add(mesh);return mesh;
+    groups.forEach(g=>geometry.addGroup(...g));
+    const mesh=new THREE.Mesh(geometry,[material(color),material(0xb49a72)]);mesh.receiveShadow=true;mesh.castShadow=lift>=0;scene.add(mesh);return mesh;
+  }
+  if(IS_PINEWATER)for(const route of [ROAD_POINTS,...SIDE_ROUTES]){
+    // One smooth grass strip hides joints between the supporting rock pieces.
+    roadRibbon(0,p=>p.section==='bridge'?p.width:p.section==='forest'?64:32,0x8b9d77,-.13,route);
   }
   cameraObstacles.push(roadRibbon(0,p=>p.width,0x79867e,0));
   roadRibbon(p=>-p.width/2+.3,.35,0xe9c897,.025);roadRibbon(p=>p.width/2-.3,.35,0xe9c897,.025);
   // Draw the shortcut from the same route points used for its solid surface
   // and the bot's navigation, so players can see exactly where it goes.
-  cameraObstacles.push(roadRibbon(0,p=>p.width,0xa39474,0,BRANCH_POINTS));
-  roadRibbon(-3.2,.2,0xf2d49a,.025,BRANCH_POINTS);roadRibbon(3.2,.2,0xf2d49a,.025,BRANCH_POINTS);
+  for(const route of SIDE_ROUTES){
+    cameraObstacles.push(roadRibbon(0,p=>p.width,IS_PINEWATER?0x79867e:0xa39474,0,route));
+    roadRibbon(p=>-p.width/2+.3,IS_PINEWATER?.35:.2,IS_PINEWATER?0xe9c897:0xf2d49a,.025,route);roadRibbon(p=>p.width/2-.3,IS_PINEWATER?.35:.2,IS_PINEWATER?0xe9c897:0xf2d49a,.025,route);
+  }
   const hiddenTop=new THREE.MeshStandardMaterial({visible:false});
   // Invisible boxes sit under the visible ribbons. These boxes, not the paint,
   // support the car and are included in the camera's wall checks.
   for(const segment of [...ROAD_SEGMENTS,...BRANCH_SEGMENTS]){
+    if(IS_PINEWATER)continue; // This larger map draws repeated pieces together.
     const roadGroup=new THREE.Group();scene.add(roadGroup);
     roadGroup.position.set(segment.x,segment.y,segment.z);
     roadGroup.rotation.set(segment.pitch,segment.yaw,0,'YXZ');
@@ -122,7 +139,7 @@ export function createWorld(canvas) {
     if(segment.section==='bridge'){
       for(let z=-segment.length/2;z<segment.length/2;z+=.6)box(roadGroup,segment.width-.2,.015,.035,0x807558,0,.025,z);
     }else if(segment.index%2===0)box(roadGroup,.16,.025,1.25,0xe8e3c9,0,.02);
-    if(segment.y>2&&segment.index%5===0){
+    if(segment.y>2&&segment.index%5===0&&(!IS_PINEWATER||segment.section==='bridge')){
       for(const x of [-segment.width/2+1.2,segment.width/2-1.2]){
         const support=new THREE.Vector3(x,-ROAD_THICKNESS,0).applyEuler(roadGroup.rotation).add(roadGroup.position);
         box(scene,1.1,support.y,1.1,0xb0af97,support.x,support.y/2,support.z);
@@ -130,14 +147,15 @@ export function createWorld(canvas) {
     }
   }
   // Raised paint sits above the road deck rather than underneath it.
-  for(let x=FINISH.minX;x<FINISH.maxX;x+=1.2){
+  if(!IS_PINEWATER)for(let x=FINISH.minX;x<FINISH.maxX;x+=1.2){
     for(const z of [FINISH.minZ,FINISH.maxZ]){const stripe=box(scene,.18,.025,1.1,0xf1deb2,x,.045,z);stripe.rotation.y=-.6;}
   }
-  for(const x of [FINISH.minX,FINISH.maxX])box(scene,.18,.025,10,0xf1deb2,x,.045,(FINISH.minZ+FINISH.maxZ)/2);
+  if(!IS_PINEWATER)for(const x of [FINISH.minX,FINISH.maxX])box(scene,.18,.025,10,0xf1deb2,x,.045,(FINISH.minZ+FINISH.maxZ)/2);
   function sign(x,y,z,yaw,text){
     const group=new THREE.Group();group.position.set(x,y,z);group.rotation.y=-yaw;scene.add(group);
     cylinder(group,.1,.1,3,0x7b8268,0,1.5,0,6);const board=label(group,text,5.5,'#fff5d9','#447e78');board.position.y=3.2;
   }
+  if(!IS_PINEWATER){
   sign(51,0,13,Math.PI,'←  LAKE CROSSING');
   sign(75,1,23,Math.PI/2,'NARROW BRIDGE');
   sign(145,2,23,Math.PI/2,'KEEP IT STEADY');
@@ -180,6 +198,7 @@ export function createWorld(canvas) {
     }
   }
 
+  }
   function cone(x, z) {
     const group = new THREE.Group(); group.position.set(x, 0, z); scene.add(group);
     box(group, .95, .13, .95, 0x505847, 0, .065, 0);
@@ -187,7 +206,7 @@ export function createWorld(canvas) {
     cylinder(group, .21, .27, .26, colors.cream, 0, .65, 0);
     const collider = { x, z, radius: .42, kind: 'cone', knocked: false, mesh: group }; obstacles.push(collider); cones.push(collider);
   }
-  [[-6,31],[6,31],[-6,22],[6,22],[-6,12],[6,12],[-6,2],[6,2],[50,8],[35,8],[37,20],[30,29],[21,17],[17,30]].forEach(([x,z]) => cone(x,z));
+  if(!IS_PINEWATER)[[-6,31],[6,31],[-6,22],[6,22],[-6,12],[6,12],[-6,2],[6,2],[50,8],[35,8],[37,20],[30,29],[21,17],[17,30]].forEach(([x,z]) => cone(x,z));
   function barrier(x, z, yaw = 0) {
     const group = new THREE.Group(); scene.add(group); group.position.set(x, 0, z); group.rotation.y = yaw;
     box(group, 5.4, .45, 1.2, 0xddd8bd, 0, .25);
@@ -195,7 +214,7 @@ export function createWorld(canvas) {
     for (let i = -2; i <= 2; i += 1.1) box(group, .55, .72, .72, colors.orange, i, 1);
     for (let i = -1.8; i <= 1.8; i += 1.8) obstacles.push({ x: x + i * Math.cos(yaw), z: z - i * Math.sin(yaw), radius: .9, kind: 'barrier' });
   }
-  [[-12,17,0],[-12,10,0],[-12,3,0],[19,-37,0],[26,-37,0]].forEach(args => barrier(...args));
+  if(!IS_PINEWATER)[[-12,17,0],[-12,10,0],[-12,3,0],[19,-37,0],[26,-37,0]].forEach(args => barrier(...args));
   GATES.forEach((gate, i) => {
     const group = new THREE.Group(); group.position.set(gate.x, gate.y, gate.z); group.rotation.y = -gate.yaw; scene.add(group);
     const parts = [];
@@ -206,6 +225,9 @@ export function createWorld(canvas) {
     gates.push({ group, parts, ring });
   });
 
+  let sails=new THREE.Group();
+  if(IS_PINEWATER)addPinewater(scene,cameraObstacles,obstacles,{box,cylinder,material,label});
+  else{
   const random = seeded();
   // Reuse one leaf shape across the forest. Overlapping, slightly uneven crowns
   // make a leafy silhouette without needing thousands of individual leaves.
@@ -253,7 +275,7 @@ export function createWorld(canvas) {
   }
   const windmill=new THREE.Group();windmill.position.set(245,0,253);scene.add(windmill);
   cylinder(windmill,2,3.5,12,0xe3d3a8,0,6,0,6);cylinder(windmill,0,3,3,0xae795c,0,13,0,6);
-  const sails=new THREE.Group();sails.position.set(0,10,-3);windmill.add(sails);
+  sails=new THREE.Group();sails.position.set(0,10,-3);windmill.add(sails);
   box(sails,.6,14,.3,0xf5ebcf);box(sails,14,.6,.3,0xf5ebcf);
   for(const x of [133,145,157])cylinder(scene,1.4,1.4,2.5,0xd6bc72,x,1.4,306,10);
   // A small workshop and a water tower give the yard a sense of place.
@@ -280,6 +302,7 @@ export function createWorld(canvas) {
     const flag=new THREE.Mesh(new THREE.ShapeGeometry(shape),new THREE.MeshStandardMaterial({color:[0xe99c67,0xf4e4b2,0x72a48c][i%3],side:THREE.DoubleSide}));flag.position.set(x,y,38);scene.add(flag);
   }
 
+  }
   // Physics orientation rotates around the chassis centre of mass, not the road.
   const car = new THREE.Group(); scene.add(car);
   const model=new THREE.Group();model.position.y=-1.35;car.add(model);
@@ -333,7 +356,7 @@ export function createWorld(canvas) {
   function render(state,dt,time,gateIndex,cameraDistance=18,traffic=[]){
     sails.rotation.z=time*.3;
     trafficMeshes.forEach((mesh,i)=>{const v=traffic[i];mesh.group.visible=!!v?.active;if(!v?.active)return;mesh.group.position.copy(v.body.position);mesh.group.quaternion.copy(v.body.quaternion);mesh.lights.forEach(l=>l.material=material(v.braking?0xff654e:0x965744));mesh.tires.forEach(t=>t.rotation.x-=v.speed*dt/.55);});
-    sun.position.set(state.x-35,65,state.z+20);sun.target.position.set(state.x,0,state.z);
+    sun.position.set(state.x-35,state.y+65,state.z+20);sun.target.position.set(state.x,state.y,state.z);
     ripples.forEach((r,i)=>{r.scale.x=1+Math.sin(time*.8+i)*.2;r.position.y=LAKE.surface+.025+Math.sin(time+i)*.018;});
     car.position.set(state.x,state.y+1.35,state.z);car.quaternion.copy(state.quaternion);
     antenna.rotation.z=Math.sin(time*8)*Math.min(state.speed*.01,.18);

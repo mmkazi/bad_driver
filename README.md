@@ -2,6 +2,25 @@
 
 A local cooperative driving experiment. Build 006 adds an alternative Everyone drives scheme and a forest fork to the 1,191-metre main route. The original Split wheels scheme, tuning and sabotage powers remain available.
 
+## Courses
+
+Use the **Course** dropdown in the top bar. Changing courses restarts practice;
+it is disabled during a timed round. Both courses support both control schemes,
+bots, and controllers.
+
+- **Sunny Side Highlands**: the original village/traffic course, unchanged.
+- **Pinewater Pass**: a roughly 3 km mountain-lake course. Dense forest hides a
+  return-to-start loop; two solid tunnels connect the upper and lower shores;
+  a concealed turnaround and a shoreline loop make the choices less obvious.
+  Cross the bridge to the island and stop at the flag to finish. Timed runs allow
+  ten minutes. This first version has no traffic and hides the route overview
+  to preserve the surprise. The practice jump buttons can skip to scenic sections.
+
+Pinewater can be linked directly with `?map=pinewater` (also on GitHub Pages).
+Its hand-placed landmarks and comments are in `src/pinewater.js`; the original
+course is preserved in `src/sunnyside.js`. To inspect scenery without driving,
+open `/tests/pinewater.html?map=pinewater` on the local server.
+
 ## Everyone drives experiment
 
 Select **Everyone drives**, choose 2–4 players, and adjust individual weights if desired. Every seat has full steering, accelerator and brake/reverse. The final active seat is the known saboteur and uses ordinary controls rather than ability buttons.

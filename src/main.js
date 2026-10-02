@@ -5,8 +5,18 @@ import {createBot,tickBot} from './bots.js';
 import {readGamepads,gatedGamepadInput} from './gamepads.js';
 import { resetTraffic } from './traffic.js';
 import { ABILITIES, createSabotage, requestSabotage, blockReason, protectCar, tickSabotage, sabotageEffects, createRound, tickRound, endRound, clockText } from './rules.js';
+import {MAP_ID,MAP_NAME,IS_PINEWATER} from './course.js';
 
 const $ = id => document.getElementById(id);
+$('mapSelect').value=MAP_ID;
+$('mapSelect').onchange=()=>{const url=new URL(location.href);url.searchParams.set('map',$('mapSelect').value);location.assign(url);};
+document.querySelector('.location').lastChild.textContent=' '+MAP_NAME.toUpperCase();
+if(IS_PINEWATER){
+  // Keep the full route a surprise. The original map keeps its overview.
+  document.querySelector('.route-map').hidden=true;
+  $('cliffButton').textContent='↗ Lake overlook';$('bridgeButton').textContent='≈ Island bridge';$('trafficButton').textContent='≈ Lower shore';
+  $('newRound').textContent='Start 10-minute round';
+}
 // Set up the visible 3D world first. If the browser cannot create it, show a
 // readable message rather than leaving an empty game area.
 let world;
@@ -118,7 +128,7 @@ function updateLesson(){
   const gate=GATES[Math.min(gateIndex,GATES.length-1)];
   $('lessonNumber').textContent=`${String(Math.min(gateIndex+1,GATES.length)).padStart(2,'0')} / ${String(GATES.length).padStart(2,'0')}`;
   $('lessonTitle').textContent=complete?'Scenic route survived':gate.title;
-  $('lessonText').textContent=complete?'Nine gates, one friendship. Reset for another road trip.':gate.text;
+  $('lessonText').textContent=complete?'All gates, one friendship. Reset for another road trip.':gate.text;
   $('lessonCheck').textContent=complete?'✓':'↗';
 }
 // A full reset returns the car, moving traffic, checkpoints, timers and scenery
@@ -141,7 +151,7 @@ $('bridgeButton').onclick=()=>{sabotage=createSabotage();resetTraffic(car.traffi
 $('trafficButton').onclick=()=>{sabotage=createSabotage();resetTraffic(car.traffic);car.checkpoint={...TRAFFIC_START};respawnCar(car,TRAFFIC_START);keys.clear();gateIndex=6;finalGateCrossed=false;stoppedTime=0;complete=false;world.snapCamera();updateLesson();setPaused(false);toast('Keep right. The locals have places to be.');};
 const results=$('resultsDialog');
 $('forkButton').onclick=()=>{sabotage=createSabotage();resetTraffic(car.traffic);car.checkpoint={...FORK_START};respawnCar(car,FORK_START);keys.clear();gateIndex=5;finalGateCrossed=false;stoppedTime=0;complete=false;world.snapCamera();updateLesson();setPaused(false);toast('Straight: wide forest loop. Left: shorter, narrower cut-through.');};
-function startRound(){if(results.open)results.close();reset();round=createRound(240);setPaused(false);toast(scheme==='crew'?'Four minutes. Everyone drives—including the saboteur.':'Four minutes. Two drivers. One saboteur.');updateSessionUI();}
+function startRound(){if(results.open)results.close();reset();round=createRound(IS_PINEWATER?600:240);setPaused(false);toast(IS_PINEWATER?'Ten minutes. Find your way to the island.':scheme==='crew'?'Four minutes. Everyone drives—including the saboteur.':'Four minutes. Two drivers. One saboteur.');updateSessionUI();}
 function showResults(outcome){
   if(!round)return;endRound(round,outcome);keys.clear();sabotage.pending=sabotage.active=null;
   $('resultsTitle').textContent=round.outcome;$('resultsMode').textContent=scheme==='crew'?($('crewRehearsal').checked?'Everyone drives · solo rehearsal':`Everyone drives · ${weights.length} seats · final seat sabotages`):mode==='solo'?'Solo-driver test round':'Two drivers versus one saboteur';
@@ -163,6 +173,7 @@ function updateSessionUI(){
   // During a timed round, prevent setup changes that could alter the rules in
   // the middle of play. Refresh buttons and status text from the current state.
   const locked=!!round?.running;
+  $('mapSelect').disabled=locked;
   for(const id of ['cliffButton','bridgeButton','trafficButton','resetButton','sharedMode','soloMode','response','turning','grip','cameraDistance','defaultsButton','newRound'])$(id).disabled=locked;
   for(const id of ['splitScheme','crewScheme','playerCount','weightDefaults','crewRehearsal','forkButton'])$(id).disabled=locked;
   $('fillBots').disabled=locked;
@@ -228,13 +239,14 @@ function updateHUD(input){
       if(sources[i].startsWith('pad:'))$(`botStatus${i}`).textContent=$('crewRehearsal').checked?'Controller bypassed in rehearsal':!armedPads.has(Number(sources[i].slice(4)))?'Release stick and triggers to arm':`Gas ${output.drive.toFixed(2)} · steer ${output.steer.toFixed(2)}`;
     });
   }
-  $('trafficCount').textContent=`${car.traffic.vehicles.filter(v=>v.active).length} LOCALS ON THE MOVE`;
+  $('trafficCount').textContent=IS_PINEWATER?'QUIET ROADS · FIND THE ISLAND':`${car.traffic.vehicles.filter(v=>v.active).length} LOCALS ON THE MOVE`;
   updateSessionUI();
 }
 const map=$('routeMap').getContext('2d');
 function drawMap(){
   // Draw the main course, shortcut, checkpoints, traffic and car as a tiny
   // overhead guide. Coordinates are squeezed into the canvas rectangle.
+  if(IS_PINEWATER)return;
   const sx=x=>(x+40)/280*120+5,sz=z=>(z+75)/370*93+5;
   map.clearRect(0,0,130,103);map.fillStyle='#87bfbd';map.fillRect(sx(LAKE.minX),sz(LAKE.minZ),sx(LAKE.maxX)-sx(LAKE.minX),sz(LAKE.maxZ)-sz(LAKE.minZ));
   map.strokeStyle='#81927e';map.lineWidth=2.4;map.beginPath();ROAD_POINTS.forEach((p,i)=>i?map.lineTo(sx(p.x),sz(p.z)):map.moveTo(sx(p.x),sz(p.z)));map.stroke();
@@ -243,7 +255,14 @@ function drawMap(){
   car.traffic.vehicles.filter(v=>v.active).forEach(v=>{map.fillStyle='#467ba0';map.fillRect(sx(v.body.position.x)-1,sz(v.body.position.z)-1,2,2);});
   map.save();map.translate(sx(car.x),sz(car.z));map.rotate(car.yaw);map.fillStyle='#d65f3f';map.strokeStyle='#fff4da';map.lineWidth=1;map.beginPath();map.moveTo(0,-5);map.lineTo(3.5,3);map.lineTo(-3.5,3);map.closePath();map.fill();map.stroke();map.restore();
 }
-$('routeLength').textContent=`${Math.round(COURSE_LENGTH)} m MAIN ROUTE · ${GATES.length} GATES · 1 FORK`;
+$('routeLength').textContent=`${Math.round(COURSE_LENGTH)} m MAIN ROUTE · ${GATES.length} GATES · ${IS_PINEWATER?'3 FORKS':'1 FORK'}`;
+// Practice shortcuts use this map's own checkpoint order, not the old village
+// indices. They are intentionally separate from the blind forks in normal play.
+if(IS_PINEWATER){
+  function jump(p,index){sabotage=createSabotage();resetTraffic(car.traffic);car.checkpoint={...p};respawnCar(car,p);keys.clear();gateIndex=index;finalGateCrossed=false;stoppedTime=0;complete=false;world.snapCamera();updateLesson();setPaused(false);toast('Practice jump. Reset to explore from the forest.');}
+  $('cliffButton').onclick=()=>jump(CLIFF_START,3);$('bridgeButton').onclick=()=>jump(BRIDGE_START,6);
+  $('trafficButton').onclick=()=>jump(TRAFFIC_START,5);$('forkButton').onclick=()=>jump(FORK_START,2);
+}
 function tick(now){
   // Browser frames do not arrive at perfectly even intervals. Run the game in
   // small fixed steps so physics and controller reads behave consistently.
@@ -274,7 +293,7 @@ function tick(now){
       }
       tickRound(round,FIXED,{impact,recovered:car.respawned,gate:passedGate});
       if(finalGateCrossed&&!complete){
-        const inBox=car.x>FINISH.minX&&car.x<FINISH.maxX&&car.z>FINISH.minZ&&car.z<FINISH.maxZ&&Math.abs(car.y)<1&&car.upY>.7;
+        const inBox=car.x>FINISH.minX&&car.x<FINISH.maxX&&car.z>FINISH.minZ&&car.z<FINISH.maxZ&&Math.abs(car.y-(FINISH.y||0))<1&&car.upY>.7;
         stoppedTime=inBox&&car.grounded>=2&&car.speed<.7?stoppedTime+FIXED:0;
         if(stoppedTime>.7){complete=true;gateIndex=GATES.length;updateLesson();toast('Scenic route complete. Somehow still friends.');if(round?.running)showResults('Course complete!');}
       }
