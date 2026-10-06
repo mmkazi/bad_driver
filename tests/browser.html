@@ -13,6 +13,8 @@ button.onclick=async()=>{
   const check=(condition,message)=>{const li=document.createElement('li');li.textContent=(condition?'PASS: ':'FAIL: ')+message;results.append(li);if(!condition)throw new Error(message);};
   try{
     check($('game').width>0&&$('loadError').hidden,'3D canvas initializes without a renderer error');
+    check($('crewScheme').getAttribute('aria-pressed')==='true'&&!$('crewPanel').hidden&&doc.querySelector('.saboteur-panel').hidden,'Everyone drives is the default with matching controls');
+    $('splitScheme').click();
     $('game').dispatchEvent(new win.PointerEvent('pointerdown',{bubbles:true}));
     $('resetButton').click();key('KeyW');key('ArrowUp');await wait(1100);
     check(Number($('speed').textContent)>10,'Shared accelerators drive the car');

@@ -32,7 +32,7 @@ try {
 // movement; this file decides which controls reach it and when a run advances.
 let car=createCar({obstacles:world.obstacles,traffic:true}), mode='shared', paused=false, gateIndex=0, finalGateCrossed=false, stoppedTime=0, complete=false;
 const keys=new Set(), tune={...DEFAULTS};
-let scheme='split',weights=[...PRESETS[4]];
+let scheme='crew',weights=[...PRESETS[4]];
 const arcadeTune={response:.1,turning:1.5,grip:1};
 const sources=['human','human','human','human'];
 let pads=[],padSignature='';
@@ -307,4 +307,6 @@ function tick(now){
   world.render(car,paused||results.open?0:dt,elapsed,gateIndex,Number($('cameraDistance').value),car.traffic.vehicles);
   requestAnimationFrame(tick);
 }
-renderSeats();updateTuning();updateLesson();requestAnimationFrame(tick);
+// Apply the starting scheme through the same setup as a button click, so the
+// visible controls and the actual driving inputs agree from the first frame.
+setScheme(scheme);updateTuning();updateLesson();requestAnimationFrame(tick);
